@@ -1,10 +1,17 @@
+import asyncio
 import json
+import os
+import tempfile
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.aggregator import aggregate_results
+from app.indexer import index_slides
+from app.llm_feedback import generate_llm_feedback
+from app.manual_analytics import compute_manual_analytics
 from app.models import (
     ErrorResponse,
     PipelineStage,
@@ -16,6 +23,7 @@ from app.models import (
     Tone,
     UploadResponse,
 )
+from app.transcriber import transcribe_audio
 
 router = APIRouter(prefix="/api")
 
@@ -28,6 +36,62 @@ STAGE_STEPS: dict[str, tuple[int, str]] = {
     "analyzing":   (4, "Running manual analytics + LLM feedback"),
     "aggregating": (5, "Combining results"),
 }
+
+
+async def _run_pipeline(
+    presentation_id: str,
+    audio_bytes: bytes,
+    metadata: PresentationMetadata,
+    presentations: dict,
+) -> None:
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
+            f.write(audio_bytes)
+            audio_path = f.name
+
+        try:
+            # Stage: transcribing (step 2/5)
+            presentations[presentation_id]["stage"] = PipelineStage.transcribing
+            whisper_result = await transcribe_audio(audio_path)
+
+            # Stage: indexing (step 3/5)
+            presentations[presentation_id]["stage"] = PipelineStage.indexing
+            indexed = index_slides(
+                words=whisper_result["words"],
+                slide_timestamps=list(metadata.slide_timestamps),
+                total_slides=metadata.total_slides,
+                recording_duration=whisper_result["duration"],
+            )
+
+            # Stage: analyzing (step 4/5) — parallel
+            presentations[presentation_id]["stage"] = PipelineStage.analyzing
+            metrics, feedback = await asyncio.gather(
+                asyncio.to_thread(compute_manual_analytics, indexed, metadata.expectations),
+                generate_llm_feedback(indexed, metadata.expectations, whisper_result["text"]),
+            )
+
+            # Stage: aggregating (step 5/5)
+            presentations[presentation_id]["stage"] = PipelineStage.aggregating
+            results = aggregate_results(
+                indexed,
+                metrics,
+                feedback,
+                metadata.expectations,
+                total_duration=whisper_result["duration"],
+                presentation_id=presentation_id,
+            )
+
+            presentations[presentation_id]["status"] = ProcessingStatus.completed
+            presentations[presentation_id]["results"] = results
+
+        finally:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+
+    except Exception as e:
+        presentations[presentation_id]["status"] = ProcessingStatus.failed
+        presentations[presentation_id]["error"] = "processing_failed"
+        presentations[presentation_id]["error_message"] = str(e)
 
 
 def _error(error: str, message: str, status_code: int, field: str | None = None,
@@ -107,12 +171,11 @@ async def create_presentation(
         "status": ProcessingStatus.processing,
         "stage": PipelineStage.received,
         "metadata": meta,
-        "audio_bytes": audio_bytes,
         "results": None,
         "error_message": None,
     }
 
-    # TODO: kick off background processing pipeline (Task 10)
+    asyncio.create_task(_run_pipeline(presentation_id, audio_bytes, meta, presentations))
 
     return JSONResponse(
         status_code=202,
