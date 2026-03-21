@@ -4,6 +4,7 @@ Manual analytics module — pure computation, no I/O, no LLM calls.
 Computes per-slide speaking metrics from word-level transcript data.
 """
 
+import math
 import string
 from collections import Counter
 from typing import Dict
@@ -89,7 +90,7 @@ def _compute_pauses(slide: SlideTranscript, threshold: float) -> PauseInfo:
         if gap > threshold:
             pause_start = words[i].end
             pause_end = words[i + 1].start
-            duration = round(pause_end - pause_start, 1)
+            duration = math.floor((pause_end - pause_start) * 10 + 0.5) / 10
             instances.append(
                 PauseInstance(start=pause_start, end=pause_end, duration_seconds=duration)
             )

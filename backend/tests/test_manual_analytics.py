@@ -82,3 +82,91 @@ def test_empty_slide():
     assert m.pauses.count == 0
     assert len(m.repeated_phrases) == 0
     assert m.speaking_pace == "slow"
+
+
+def test_single_filler_detection():
+    slide = _make_slide([
+        ("Hello", 0.0, 0.5), ("um", 1.0, 1.2), ("world", 2.0, 2.5)
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].filler_words.count == 1
+    assert result["slide_0"].filler_words.instances[0].word == "um"
+    assert result["slide_0"].filler_words.instances[0].timestamp == 1.0
+
+
+def test_multi_word_filler():
+    slide = _make_slide([
+        ("you", 0.0, 0.3), ("know", 0.4, 0.7), ("stuff", 1.0, 1.5)
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].filler_words.count == 1
+    assert result["slide_0"].filler_words.instances[0].word == "you know"
+
+
+def test_filler_case_insensitive():
+    slide = _make_slide([("BASICALLY", 0.0, 0.5), ("UM", 1.0, 1.2)])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].filler_words.count == 2
+
+
+def test_pause_detected_formal():
+    # Formal threshold = 2.0s. Gap of 2.5s should be detected.
+    slide = _make_slide([
+        ("hello", 0.0, 0.5), ("world", 3.0, 3.5)  # gap = 3.0 - 0.5 = 2.5s
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].pauses.count == 1
+    assert result["slide_0"].pauses.instances[0].start == 0.5
+    assert result["slide_0"].pauses.instances[0].end == 3.0
+
+
+def test_pause_duration_rounded_to_one_decimal():
+    # Gap: 3.15 - 0.5 = 2.65s -> should round to 2.7
+    slide = _make_slide([
+        ("hello", 0.0, 0.5), ("world", 3.15, 3.5)
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].pauses.count == 1
+    assert result["slide_0"].pauses.instances[0].duration_seconds == 2.7
+
+
+def test_pause_not_detected_below_threshold():
+    # Gap of 1.5s < formal threshold 2.0s
+    slide = _make_slide([
+        ("hello", 0.0, 0.5), ("world", 2.0, 2.5)  # gap = 1.5s
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    assert result["slide_0"].pauses.count == 0
+
+
+def test_pause_casual_higher_threshold():
+    # Casual threshold = 3.0s. Gap of 2.5s should NOT be detected.
+    slide = _make_slide([
+        ("hello", 0.0, 0.5), ("world", 3.0, 3.5)  # gap = 2.5s
+    ])
+    casual = Expectations(tone=Tone.casual, expected_duration_minutes=10, context="test")
+    result = compute_manual_analytics({"slide_0": slide}, casual)
+    assert result["slide_0"].pauses.count == 0
+
+
+def test_repeated_bigram():
+    slide = _make_slide([
+        ("climate", 0.0, 0.5), ("change", 0.6, 1.0),
+        ("is", 1.5, 1.7), ("real", 1.8, 2.0),
+        ("climate", 2.5, 3.0), ("change", 3.1, 3.5),
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    phrases = {p.phrase for p in result["slide_0"].repeated_phrases}
+    assert "climate change" in phrases
+
+
+def test_stop_words_only_excluded():
+    slide = _make_slide([
+        ("it", 0.0, 0.3), ("is", 0.4, 0.6),
+        ("good", 0.7, 1.0),
+        ("it", 1.5, 1.7), ("is", 1.8, 2.0),
+        ("bad", 2.1, 2.4),
+    ])
+    result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
+    phrases = {p.phrase for p in result["slide_0"].repeated_phrases}
+    assert "it is" not in phrases  # all stop words, excluded
