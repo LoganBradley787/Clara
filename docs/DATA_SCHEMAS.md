@@ -66,12 +66,14 @@ Sent by frontend as part of the metadata JSON.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `slide_timestamps` | `number[]` | Start time of each slide in seconds. Sorted ascending. |
-| `total_slides` | `integer` | Must equal length of `slide_timestamps` |
+| `slide_timestamps` | `number[]` | Start time of each slide in seconds. Sorted ascending. Length >= `total_slides` (may exceed it if user navigated backward then forward; backend uses only the first `total_slides` entries). |
+| `total_slides` | `integer` | Number of slides in the PDF. Must be <= length of `slide_timestamps`. |
 
 **Slide boundary logic:**
 - `slide_0`: words where `start >= slide_timestamps[0]` and `start < slide_timestamps[1]`
-- `slide_N` (last): words where `start >= slide_timestamps[N]` and `start <= recording_end`
+- `slide_N` (last): words where `start >= slide_timestamps[N]` and `start < recording_end`
+
+> **Note:** All slide boundaries use strict `<` for the end bound. The last slide uses `recording_end` (Whisper `duration`) as its upper bound. A word exactly at `recording_end` is excluded (this is a degenerate edge case — Whisper word timestamps are always strictly within the audio duration).
 
 ---
 
@@ -174,8 +176,10 @@ Output of the Manual Analytics module.
 | `repeated_phrases[]` | array | Phrases (2+ words) repeated 2+ times |
 | `speaking_pace` | string | `"slow"`, `"normal"`, `"fast"` based on tone WPM ranges |
 
+> **Aggregation note:** The aggregator promotes `duration_seconds` from the metrics object to the slide top level. In the final API response (§7), `duration_seconds` appears at the slide level, **not** inside `metrics`. Implementations of `manual_analytics.py` should still compute and return `duration_seconds` as part of `SlideMetrics` — the restructuring happens in the aggregator.
+
 **Filler word list:**
-`um`, `uh`, `like`, `you know`, `so`, `basically`, `actually`, `literally`, `right`, `I mean`, `kind of`, `sort of`
+`um`, `uh`, `like`, `you know`, `basically`, `actually`, `literally`, `right`, `I mean`, `kind of`, `sort of`
 
 **Pause threshold by tone:**
 
@@ -188,12 +192,12 @@ Output of the Manual Analytics module.
 
 **Speaking pace ranges:**
 
-| Tone | Slow | Normal | Fast |
+| Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| formal | < 130 WPM | 130–160 WPM | > 160 WPM |
-| casual | < 140 WPM | 140–180 WPM | > 180 WPM |
-| informative | < 120 WPM | 120–150 WPM | > 150 WPM |
-| persuasive | < 140 WPM | 140–170 WPM | > 170 WPM |
+| formal | < 130 WPM | 130 ≤ WPM ≤ 160 | > 160 WPM |
+| casual | < 140 WPM | 140 ≤ WPM ≤ 180 | > 180 WPM |
+| informative | < 120 WPM | 120 ≤ WPM ≤ 150 | > 150 WPM |
+| persuasive | < 140 WPM | 140 ≤ WPM ≤ 170 | > 170 WPM |
 
 ---
 
@@ -242,10 +246,10 @@ The complete results object returned by `GET /api/presentations/{id}/results`.
 {
   "presentation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "total_slides": 4,
-  "total_duration_seconds": 600.0,
+  "total_duration_seconds": 585.3,
   "overall_metrics": {
     "total_word_count": 1500,
-    "average_wpm": 150.0,
+    "average_wpm": 153.8,
     "total_filler_count": 12,
     "total_pause_count": 8,
     "expected_duration_seconds": 600,
@@ -293,6 +297,23 @@ The complete results object returned by `GET /api/presentations/{id}/results`.
   }
 }
 ```
+
+### Aggregation Notes
+
+The aggregator merges data from three sources into each slide object. Two fields are **renamed or relocated** during aggregation:
+
+| Transformation | Detail |
+|---------------|--------|
+| **`text` → `transcript`** | The slide-indexed transcript (§3) field `text` is renamed to `transcript` in the final output. |
+| **`duration_seconds` promoted** | Manual analytics (§5) computes `duration_seconds` inside the metrics object, but the aggregator moves it to the **slide top level** and excludes it from `metrics`. |
+
+| Field | Source |
+|-------|--------|
+| `slide_index`, `start_time`, `end_time`, `words` | Slide-indexed transcript (§3) |
+| `transcript` | Slide-indexed transcript (§3) `text` field, renamed |
+| `duration_seconds` | Manual analytics (§5), promoted to slide top level |
+| `metrics` (all fields except `duration_seconds`) | Manual analytics output (§5) |
+| `feedback` | LLM feedback output (§6) |
 
 ### Overall Metrics
 

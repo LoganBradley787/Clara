@@ -85,7 +85,7 @@ All processing runs within a single FastAPI application, organized as internal m
 - **No database**: All state is in-memory; results exist only until server restart
 - **No auth**: Single-user, no sessions
 - **Single audio file**: Complete recording uploaded after presentation ends
-- **Synchronous processing**: Frontend polls; backend processes sequentially
+- **Poll-based processing**: Frontend polls for completion; backend runs pipeline stages sequentially, except manual analytics and LLM feedback which run in parallel
 - **Slide IDs are zero-indexed integers**: `slide_0`, `slide_1`, etc.
 - **Presentation IDs are UUIDs**: Generated server-side
 

@@ -21,7 +21,7 @@ React + Vite + TypeScript frontend. This document is the complete reference for 
 /                → Landing Page
 /setup           → Setup Page (PDF upload + expectations)
 /present         → Recording Page (slide display + audio recording)
-/processing/:id  → Processing Page (polling state)
+/processing      → Processing Page (upload + polling state)
 /results/:id     → Results Page (slide carousel + side panel)
 ```
 
@@ -184,13 +184,11 @@ Use React Router for navigation. No nested layouts required.
 - `slideTimestamps: number[]`
 - `totalSlides: number` (from PDF page count, not timestamp count)
 
-**Edge case:** If user goes back and forward, `slideTimestamps` will have more entries than `totalSlides`. The backend uses `totalSlides` from metadata and only the first N timestamps, but the frontend should send all timestamps. The backend's `total_slides` field in metadata should equal the PDF page count, and `slide_timestamps` should be the full array of recorded timestamps. The backend handles the mapping.
-
-**Revised approach:** `total_slides` = PDF page count. `slide_timestamps` length may differ. Backend uses `total_slides` to determine how many slides to create and maps timestamps accordingly. Frontend sends both values.
+**Edge case:** If the user navigates back and forward, `slideTimestamps` will have more entries than `totalSlides`. This is expected. The frontend sends all recorded timestamps, and `total_slides` is always set to the PDF page count. The backend truncates `slide_timestamps` to the first `total_slides` entries before indexing.
 
 ---
 
-## Page 4: Processing Page (`/processing/:id`)
+## Page 4: Processing Page (`/processing`)
 
 **Purpose:** Show processing progress while backend works.
 
@@ -205,8 +203,8 @@ Use React Router for navigation. No nested layouts required.
 │  │  ✓ Upload received                │  │
 │  │  ● Transcribing audio...          │  │
 │  │  ○ Indexing transcript            │  │
-│  │  ○ Analyzing speaking patterns    │  │
-│  │  ○ Generating feedback            │  │
+│  │  ○ Analyzing & generating feedback │  │
+│  │  ○ Combining results              │  │
 │  └───────────────────────────────────┘  │
 │                                         │
 │           Step 2 of 5                   │
@@ -236,13 +234,15 @@ Use React Router for navigation. No nested layouts required.
 
 **Step mapping:**
 
+Use the `stage` field from the status response to drive the UI. Map stages to display text using the frontend's own labels (do **not** rely on `progress.step_name` from the API — it exists for debugging, not display):
+
 | Stage | Display Text |
 |-------|-------------|
 | `received` | Upload received |
 | `transcribing` | Transcribing audio |
 | `indexing` | Indexing transcript |
-| `analyzing` | Analyzing speaking patterns |
-| `aggregating` | Generating feedback |
+| `analyzing` | Analyzing patterns & generating feedback |
+| `aggregating` | Combining results |
 
 ---
 
@@ -335,7 +335,7 @@ Use React Router for navigation. No nested layouts required.
 
 **API usage:**
 - On page load: `GET /api/presentations/{id}/results`
-- If returns 409 (not ready): redirect to `/processing/{id}`
+- If returns 409 (not ready): redirect to `/processing` (which will resume polling if it still has the presentation ID in state)
 - If returns 404: show error, link to home
 
 ---

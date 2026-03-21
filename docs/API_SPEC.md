@@ -8,13 +8,32 @@ This is the contract between frontend and backend. No deviations allowed.
 http://localhost:8000/api
 ```
 
+## Standard Error Format
+
+All error responses follow this structure:
+
+```json
+{
+  "error": "error_code",
+  "message": "Human-readable description of the error"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `error` | string | Yes | Machine-readable error code (e.g., `"validation_error"`, `"not_found"`, `"processing_failed"`) |
+| `message` | string | Yes | Human-readable error description |
+| `field` | string | No | The specific field that caused the error (validation errors only) |
+| `status` | string | No | Current processing status (included when relevant, e.g., `"processing"` on 409) |
+| `presentation_id` | string | No | Included in status/results error responses where the presentation exists |
+
 ## Endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/presentations` | Submit a presentation for processing |
-| GET | `/presentations/{id}/status` | Poll processing status |
-| GET | `/presentations/{id}/results` | Retrieve final results |
+| POST | `/api/presentations` | Submit a presentation for processing |
+| GET | `/api/presentations/{id}/status` | Poll processing status |
+| GET | `/api/presentations/{id}/results` | Retrieve final results |
 
 ---
 
@@ -49,7 +68,7 @@ Submit a recorded presentation for analysis.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `slide_timestamps` | `number[]` | Yes | Array of timestamps (seconds) when each slide was started. Length must equal `total_slides`. First element should be `0.0` or close to it. |
+| `slide_timestamps` | `number[]` | Yes | Array of timestamps (seconds) when each slide was started. Length must be >= `total_slides` (may exceed it if the user navigated backward then forward). First element should be `0.0` or close to it. |
 | `expectations.tone` | `string` | Yes | One of: `"formal"`, `"casual"`, `"informative"`, `"persuasive"` |
 | `expectations.expected_duration_minutes` | `number` | Yes | Expected total presentation duration in minutes |
 | `expectations.context` | `string` | Yes | Brief description of presentation purpose and audience |
@@ -58,7 +77,7 @@ Submit a recorded presentation for analysis.
 **Validation rules:**
 - `audio` must be non-empty and under 100MB
 - `slide_timestamps` must be sorted ascending
-- `slide_timestamps` length must equal `total_slides`
+- `slide_timestamps` length must be >= `total_slides`
 - `total_slides` must be >= 1 and <= 100
 - `expected_duration_minutes` must be > 0 and <= 120
 - `tone` must be one of the allowed values
@@ -142,12 +161,23 @@ Poll for processing progress.
 | `analyzing` | 4 | Running manual analytics + LLM feedback |
 | `aggregating` | 5 | Combining results |
 
+**When status is `completed`:**
+```json
+{
+  "presentation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "completed"
+}
+```
+
+No `stage` or `progress` fields are included when status is `completed`. The frontend should stop polling and fetch results from the results endpoint.
+
 **When status is `failed`:**
 ```json
 {
   "presentation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "status": "failed",
-  "error": "Whisper API returned an error: invalid audio format"
+  "error": "processing_failed",
+  "message": "Whisper API returned an error: invalid audio format"
 }
 ```
 
@@ -181,10 +211,10 @@ Retrieve final processed results.
 {
   "presentation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "total_slides": 4,
-  "total_duration_seconds": 600.0,
+  "total_duration_seconds": 585.3,
   "overall_metrics": {
     "total_word_count": 1500,
-    "average_wpm": 150.0,
+    "average_wpm": 153.8,
     "total_filler_count": 12,
     "total_pause_count": 8,
     "expected_duration_seconds": 600,
@@ -247,6 +277,14 @@ Retrieve final processed results.
 - `slide_index` field contains the integer index
 - The `slides` object is keyed by slide ID strings
 
+### Top-Level Result Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `presentation_id` | string (UUID) | The presentation identifier |
+| `total_slides` | integer | Number of slides |
+| `total_duration_seconds` | float | Actual recording duration in seconds (from Whisper `duration` field). This is the same value as `overall_metrics.actual_duration_seconds`. |
+
 ### Presentation ID System
 
 - UUIDs generated server-side (v4)
@@ -257,12 +295,12 @@ Retrieve final processed results.
 
 Expectations are passed in the initial POST and influence both manual analysis (pace benchmarks based on tone) and LLM analysis (context for feedback).
 
-| Tone | Expected WPM Range | Pause Tolerance |
-|------|-------------------|-----------------|
-| `formal` | 130–160 | Pauses > 2s flagged |
-| `casual` | 140–180 | Pauses > 3s flagged |
-| `informative` | 120–150 | Pauses > 2.5s flagged |
-| `persuasive` | 140–170 | Pauses > 2s flagged |
+| Tone | Slow | Normal | Fast | Pause Tolerance |
+|------|------|--------|------|-----------------|
+| `formal` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
+| `casual` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
+| `informative` | < 120 | 120–150 (inclusive) | > 150 | Pauses > 2.5s flagged |
+| `persuasive` | < 140 | 140–170 (inclusive) | > 170 | Pauses > 2s flagged |
 
 ### Feedback Item Format
 

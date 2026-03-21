@@ -7,14 +7,16 @@ Step-by-step deterministic pipeline from recording to results.
 ## Pipeline Overview
 
 ```
-Step 1: Frontend Recording
-Step 2: Upload Submission
-Step 3: Whisper Transcription
-Step 4: Slide Indexing
-Step 5: Parallel Analysis (Manual + LLM)
-Step 6: Aggregation
-Step 7: Results Available
+Step 1: Frontend Recording          (client-side)
+Step 2: Upload Submission           (client → server)
+Step 3: Whisper Transcription       (server — backend stage 2/5: "transcribing")
+Step 4: Slide Indexing              (server — backend stage 3/5: "indexing")
+Step 5: Parallel Analysis           (server — backend stage 4/5: "analyzing")
+Step 6: Aggregation                 (server — backend stage 5/5: "aggregating")
+Step 7: Results Available           (server → client)
 ```
+
+> **Note:** This document describes the full 7-step end-to-end pipeline. The status API (`GET /api/presentations/{id}/status`) reports **5 backend stages** only (received → transcribing → indexing → analyzing → aggregating). Steps 1–2 happen client-side before the backend begins, and step 7 is the terminal state.
 
 ---
 
@@ -36,8 +38,8 @@ Step 7: Results Available
 
 **Output:**
 - Audio blob (`Blob`, type `audio/webm`)
-- `slide_timestamps: number[]` — e.g., `[0.0, 45.2, 102.7, 180.0]`
-- `total_slides: number` — must equal `slide_timestamps.length`
+- `slide_timestamps: number[]` — e.g., `[0.0, 45.2, 102.7, 180.0]`. May have more entries than `total_slides` if the user navigated backward then forward.
+- `total_slides: number` — the PDF page count. Must be <= `slide_timestamps.length`.
 
 **Constraints:**
 - Minimum 1 slide
@@ -110,12 +112,16 @@ Step 7: Results Available
 - `slide_timestamps` from metadata
 - Total recording duration from Whisper `duration`
 
+**Pre-processing:** If `slide_timestamps` has more entries than `total_slides` (this happens when the user navigated backward then forward during recording), truncate to the first `total_slides` entries. The extra timestamps are discarded.
+
 **Algorithm:**
 ```
+timestamps = slide_timestamps[:total_slides]  # truncate extras
+
 for each slide_index from 0 to total_slides - 1:
-    slide_start = slide_timestamps[slide_index]
-    slide_end = slide_timestamps[slide_index + 1] if not last slide
-              = recording_duration if last slide
+    slide_start = timestamps[slide_index]
+    slide_end = timestamps[slide_index + 1] if not last slide
+              = recording_end if last slide
 
     slide_words = [w for w in words if w.start >= slide_start and w.start < slide_end]
     slide_text = " ".join([w.word for w in slide_words])
@@ -133,6 +139,7 @@ for each slide_index from 0 to total_slides - 1:
 - Words exactly at a slide boundary (`word.start == slide_end`) belong to the NEXT slide
 - Last slide captures all remaining words until end of recording
 - A slide with no words gets an empty `words` array and empty `text`
+- Extra timestamps beyond `total_slides` are truncated before indexing
 
 **Output:** `Dict[str, SlideTranscript]` — see DATA_SCHEMAS.md §3
 
@@ -142,7 +149,7 @@ for each slide_index from 0 to total_slides - 1:
 
 **Stage:** `analyzing` (step 4/5)
 
-Two independent analysis paths run on the slide-indexed transcript.
+Two independent analysis paths run **concurrently** on the slide-indexed transcript. Use `asyncio.gather` to run both in parallel. These are the only concurrent stages in the pipeline; all other stages run sequentially.
 
 ### 5a: Manual Analytics
 
@@ -183,7 +190,7 @@ Two independent analysis paths run on the slide-indexed transcript.
 
 **Input:** Slide-indexed transcript + expectations + full presentation text
 
-**Per-slide processing (run N times, once per slide):**
+**Per-slide processing (run N times, once per slide, sequentially by default; see SERVICE_LLM.md for optional parallelization):**
 
 1. Construct prompt with:
    - Full presentation transcript (for cross-slide context)
@@ -216,20 +223,26 @@ Two independent analysis paths run on the slide-indexed transcript.
 **Actions:**
 
 1. For each slide ID, merge:
-   - Transcript data (text, words, start/end times)
+   - Transcript data (words, start/end times)
    - Manual metrics
    - LLM feedback items
 
-2. Compute overall metrics:
+2. Apply field transformations:
+   - **Rename `text` → `transcript`**: The slide-indexed transcript `text` field becomes `transcript` in the final output
+   - **Promote `duration_seconds`**: Move `duration_seconds` from inside the metrics object to the slide top level (exclude it from `metrics`)
+
+3. Set `total_duration_seconds` = Whisper `duration` (actual recording length)
+
+4. Compute overall metrics:
    - `total_word_count`: sum of all slide word counts
-   - `average_wpm`: `total_word_count / (total_duration / 60)`
+   - `average_wpm`: `total_word_count / (total_duration_seconds / 60)`
    - `total_filler_count`: sum of all slide filler counts
    - `total_pause_count`: sum of all slide pause counts
    - `expected_duration_seconds`: `expectations.expected_duration_minutes * 60`
-   - `actual_duration_seconds`: Whisper `duration`
-   - `duration_deviation_seconds`: `actual - expected`
+   - `actual_duration_seconds`: same as `total_duration_seconds`
+   - `duration_deviation_seconds`: `actual_duration_seconds - expected_duration_seconds`
 
-3. Construct final `PresentationResults` object
+5. Construct final `PresentationResults` object
 
 **Output:** See DATA_SCHEMAS.md §7
 
@@ -254,7 +267,7 @@ Two independent analysis paths run on the slide-indexed transcript.
 | Snowflake API failure | analyzing | Set status `failed`, include API error message |
 | Invalid audio format | transcribing | Set status `failed`, message: "Unsupported audio format" |
 | Empty transcript | indexing | Proceed with empty slides (valid edge case) |
-| LLM returns malformed JSON | analyzing | Retry once, then set status `failed` |
+| LLM returns malformed JSON | analyzing | Retry once, then return empty feedback for that slide (graceful degradation) |
 
 ## Timing Expectations
 

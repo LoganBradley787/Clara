@@ -125,7 +125,6 @@ Round to 1 decimal place.
 | actually | |
 | literally | |
 | right | |
-| so | |
 
 **Algorithm:**
 
@@ -144,7 +143,7 @@ for i, word in enumerate(slide.words):
             record filler instance (use first word's timestamp)
 ```
 
-**Important:** "like" is only a filler when not part of a comparison (e.g., "like a" is filler, "looks like" may not be). For hackathon scope, count all instances of "like" as fillers. Similarly, "so" at the start of a sentence is filler, but mid-sentence may not be. Count all instances for simplicity.
+**Important:** "like" is only a filler when not part of a comparison (e.g., "like a" is filler, "looks like" may not be). For hackathon scope, count all instances of "like" as fillers.
 
 **Output per instance:**
 ```json
@@ -218,12 +217,12 @@ A phrase is excluded only if ALL words in it are stop words.
 
 Compare computed WPM against tone-specific ranges:
 
-| Tone | Slow | Normal | Fast |
+| Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| formal | < 130 | 130–160 | > 160 |
-| casual | < 140 | 140–180 | > 180 |
-| informative | < 120 | 120–150 | > 150 |
-| persuasive | < 140 | 140–170 | > 170 |
+| formal | < 130 | 130 ≤ WPM ≤ 160 | > 160 |
+| casual | < 140 | 140 ≤ WPM ≤ 180 | > 180 |
+| informative | < 120 | 120 ≤ WPM ≤ 150 | > 150 |
+| persuasive | < 140 | 140 ≤ WPM ≤ 170 | > 170 |
 
 Output: `"slow"`, `"normal"`, or `"fast"`
 
