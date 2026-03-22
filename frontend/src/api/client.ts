@@ -7,12 +7,14 @@ import type {
   ApiError,
 } from '../types';
 
-const BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 class ApiClientError extends Error {
-  constructor(public readonly apiError: ApiError) {
+  readonly apiError: ApiError;
+  constructor(apiError: ApiError) {
     super(apiError.message);
     this.name = 'ApiClientError';
+    this.apiError = apiError;
   }
 }
 

@@ -45,7 +45,7 @@ def compute_manual_analytics(
 **Expectations:**
 ```json
 {
-  "tone": "formal",
+  "tone": "professional",
   "expected_duration_minutes": 10,
   "context": "Class presentation on climate change"
 }
@@ -160,10 +160,11 @@ A pause is a gap between consecutive words that exceeds the tone-based threshold
 
 | Tone | Threshold |
 |------|-----------|
-| formal | 2.0 seconds |
-| casual | 3.0 seconds |
-| informative | 2.5 seconds |
+| professional | 2.0 seconds |
+| conversational | 3.0 seconds |
+| educational | 2.5 seconds |
 | persuasive | 2.0 seconds |
+| storytelling | 3.5 seconds |
 
 **Algorithm:**
 
@@ -219,10 +220,11 @@ Compare computed WPM against tone-specific ranges:
 
 | Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| formal | < 130 | 130 ≤ WPM ≤ 160 | > 160 |
-| casual | < 140 | 140 ≤ WPM ≤ 180 | > 180 |
-| informative | < 120 | 120 ≤ WPM ≤ 150 | > 150 |
+| professional | < 130 | 130 ≤ WPM ≤ 160 | > 160 |
+| conversational | < 140 | 140 ≤ WPM ≤ 180 | > 180 |
+| educational | < 110 | 110 ≤ WPM ≤ 145 | > 145 |
 | persuasive | < 140 | 140 ≤ WPM ≤ 170 | > 170 |
+| storytelling | < 120 | 120 ≤ WPM ≤ 160 | > 160 |
 
 Output: `"slow"`, `"normal"`, or `"fast"`
 

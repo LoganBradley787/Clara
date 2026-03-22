@@ -5,10 +5,11 @@ from enum import Enum
 # --- Enums ---
 
 class Tone(str, Enum):
-    formal = "formal"
-    casual = "casual"
-    informative = "informative"
+    professional = "professional"
+    conversational = "conversational"
+    educational = "educational"
     persuasive = "persuasive"
+    storytelling = "storytelling"
 
 class SpeakingPace(str, Enum):
     slow = "slow"

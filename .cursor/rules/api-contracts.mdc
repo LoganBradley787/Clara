@@ -35,7 +35,7 @@ Only these three endpoints exist. Do not invent others.
 {
   "slide_timestamps": [0.0, 45.2, 102.7, 180.0],
   "expectations": {
-    "tone": "formal",
+    "tone": "professional",
     "expected_duration_minutes": 10,
     "context": "Class presentation on climate change for university course"
   },
@@ -48,7 +48,7 @@ Only these three endpoints exist. Do not invent others.
 - `slide_timestamps`: sorted ascending, length >= `total_slides`
 - `total_slides`: >= 1, <= 100
 - `expected_duration_minutes`: > 0, <= 120
-- `tone`: one of `"formal"`, `"casual"`, `"informative"`, `"persuasive"`
+- `tone`: one of `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"`
 - `context`: non-empty, <= 500 characters
 
 ### Response: 202 Accepted

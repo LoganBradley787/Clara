@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 const rise = {
   initial: { opacity: 0, y: 24 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] } },
 };
 const fadeIn = {
   initial: { opacity: 0 },
@@ -70,7 +70,7 @@ const PROBLEMS = [
 const CAPABILITIES = [
   {
     title: 'Words Per Minute',
-    description: 'Per-slide pace measurement calibrated to your chosen tone — formal, casual, informative, or persuasive — each with its own benchmarks.',
+    description: 'Per-slide pace measurement calibrated to your presentation style — professional, conversational, educational, persuasive, or storytelling — each with its own benchmarks.',
     color: '#2B5F8A',
     tag: 'metrics',
   },
@@ -82,7 +82,7 @@ const CAPABILITIES = [
   },
   {
     title: 'Pause Analysis',
-    description: 'Identifies pauses that exceed tone-appropriate thresholds. A 2-second pause in a formal talk is notable; in casual conversation, it\'s nothing.',
+    description: 'Identifies pauses that exceed tone-appropriate thresholds. A 2-second pause in a professional setting is notable; in conversation, it\'s nothing.',
     color: '#A13B3B',
     tag: 'analysis',
   },
@@ -173,7 +173,7 @@ export default function LandingPage() {
                 letterSpacing: '0.18em',
               }}
             >
-              Presentation Telemetry
+              Your Presentation Assistant
             </span>
           </motion.div>
 
@@ -304,7 +304,7 @@ export default function LandingPage() {
                 >
                   {m.label}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
                   <span
                     className="metric-value"
                     style={{ color: 'var(--text-on-dark)', fontSize: 'var(--text-xl)' }}
@@ -322,6 +322,7 @@ export default function LandingPage() {
                         background: m.badgeColor,
                         borderRadius: '9999px',
                         padding: '1px 6px',
+                        alignSelf: 'flex-start',
                       }}
                     >
                       {m.badge}

@@ -48,7 +48,7 @@ export default function ResultsPage() {
     }
   }, [audioBlob, id]);
 
-  const player = useAudioPlayer(audioSrc);
+  const player = useAudioPlayer(audioSrc, results?.total_duration_seconds);
 
   useEffect(() => {
     if (contextResults) {
@@ -413,7 +413,7 @@ export default function ResultsPage() {
 
 const zoneVariants = {
   hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 };
 
 const cardStyle: React.CSSProperties = {

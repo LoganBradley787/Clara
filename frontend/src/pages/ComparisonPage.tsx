@@ -8,7 +8,7 @@ import type { PresentationResults, OverallMetrics } from '../types';
 export default function ComparisonPage() {
   const { id1, id2 } = useParams<{ id1: string; id2: string }>();
   const navigate = useNavigate();
-  const { startPracticeAgain, resetAll } = useAppActions();
+  const { startPracticeAgain } = useAppActions();
 
   const [prev, setPrev] = useState<PresentationResults | null>(null);
   const [curr, setCurr] = useState<PresentationResults | null>(null);

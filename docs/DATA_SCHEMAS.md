@@ -119,7 +119,7 @@ Sent by frontend, used by both Manual Analytics and LLM Module.
 
 ```json
 {
-  "tone": "formal",
+  "tone": "professional",
   "expected_duration_minutes": 10,
   "context": "Class presentation on climate change for university course"
 }
@@ -127,7 +127,7 @@ Sent by frontend, used by both Manual Analytics and LLM Module.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|---------------|-------------|
-| `tone` | string | `"formal"`, `"casual"`, `"informative"`, `"persuasive"` | Affects WPM benchmarks and pause thresholds |
+| `tone` | string | `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"` | Affects WPM benchmarks and pause thresholds |
 | `expected_duration_minutes` | number | 1–120 | Target duration |
 | `context` | string | free text, max 500 chars | Audience and purpose context for LLM |
 
@@ -185,19 +185,21 @@ Output of the Manual Analytics module.
 
 | Tone | Pause Threshold |
 |------|----------------|
-| formal | > 2.0s |
-| casual | > 3.0s |
-| informative | > 2.5s |
+| professional | > 2.0s |
+| conversational | > 3.0s |
+| educational | > 2.5s |
 | persuasive | > 2.0s |
+| storytelling | > 3.5s |
 
 **Speaking pace ranges:**
 
 | Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| formal | < 130 WPM | 130 ≤ WPM ≤ 160 | > 160 WPM |
-| casual | < 140 WPM | 140 ≤ WPM ≤ 180 | > 180 WPM |
-| informative | < 120 WPM | 120 ≤ WPM ≤ 150 | > 150 WPM |
+| professional | < 130 WPM | 130 ≤ WPM ≤ 160 | > 160 WPM |
+| conversational | < 140 WPM | 140 ≤ WPM ≤ 180 | > 180 WPM |
+| educational | < 110 WPM | 110 ≤ WPM ≤ 145 | > 145 WPM |
 | persuasive | < 140 WPM | 140 ≤ WPM ≤ 170 | > 170 WPM |
+| storytelling | < 120 WPM | 120 ≤ WPM ≤ 160 | > 160 WPM |
 
 ---
 

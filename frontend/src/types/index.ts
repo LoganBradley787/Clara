@@ -1,5 +1,5 @@
 export interface PresentationExpectations {
-  tone: 'formal' | 'casual' | 'informative' | 'persuasive';
+  tone: 'professional' | 'conversational' | 'educational' | 'persuasive' | 'storytelling';
   expected_duration_minutes: number;
   context: string;
 }

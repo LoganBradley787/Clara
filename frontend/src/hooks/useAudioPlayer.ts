@@ -16,14 +16,18 @@ interface AudioPlayerControls {
 
 export type UseAudioPlayerReturn = AudioPlayerState & AudioPlayerControls;
 
-export function useAudioPlayer(src: string | null): UseAudioPlayerReturn {
+export function useAudioPlayer(src: string | null, fallbackDuration?: number): UseAudioPlayerReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [rawDuration, setRawDuration] = useState(0);
   const [isReady, setIsReady] = useState(false);
+
+  const duration = Number.isFinite(rawDuration) && rawDuration > 0
+    ? rawDuration
+    : (fallbackDuration ?? 0);
 
   useEffect(() => {
     if (!src) return;
@@ -31,22 +35,35 @@ export function useAudioPlayer(src: string | null): UseAudioPlayerReturn {
     const audio = new Audio(src);
     audioRef.current = audio;
 
+    const trySetDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setRawDuration(audio.duration);
+      }
+    };
+
     const onLoaded = () => {
-      setDuration(audio.duration);
+      trySetDuration();
       setIsReady(true);
+    };
+
+    const onDurationChange = () => {
+      trySetDuration();
     };
 
     const onEnded = () => {
       setIsPlaying(false);
       cancelAnimationFrame(rafRef.current);
+      trySetDuration();
     };
 
     audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('durationchange', onDurationChange);
     audio.addEventListener('ended', onEnded);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
       audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('durationchange', onDurationChange);
       audio.removeEventListener('ended', onEnded);
       audio.pause();
       audioRef.current = null;

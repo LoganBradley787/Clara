@@ -58,7 +58,7 @@ Submit a recorded presentation for analysis.
 {
   "slide_timestamps": [0.0, 45.2, 102.7, 180.0],
   "expectations": {
-    "tone": "formal",
+    "tone": "professional",
     "expected_duration_minutes": 10,
     "context": "Class presentation on climate change for university course"
   },
@@ -71,7 +71,7 @@ Submit a recorded presentation for analysis.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `slide_timestamps` | `number[]` | Yes | Array of timestamps (seconds) when each slide was started. Length must be >= `total_slides` (may exceed it if the user navigated backward then forward). First element should be `0.0` or close to it. |
-| `expectations.tone` | `string` | Yes | One of: `"formal"`, `"casual"`, `"informative"`, `"persuasive"` |
+| `expectations.tone` | `string` | Yes | One of: `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"` |
 | `expectations.expected_duration_minutes` | `number` | Yes | Expected total presentation duration in minutes |
 | `expectations.context` | `string` | Yes | Brief description of presentation purpose and audience |
 | `total_slides` | `number` | Yes | Total number of slides in the presentation |
@@ -258,7 +258,7 @@ Retrieve final processed results.
       "feedback": [
         {
           "category": "pacing",
-          "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for formal presentations. Consider increasing pace slightly on this introductory slide.",
+          "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for professional presentations. Consider increasing pace slightly on this introductory slide.",
           "severity": "observation"
         },
         {
@@ -299,10 +299,11 @@ Expectations are passed in the initial POST and influence both manual analysis (
 
 | Tone | Slow | Normal | Fast | Pause Tolerance |
 |------|------|--------|------|-----------------|
-| `formal` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
-| `casual` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
-| `informative` | < 120 | 120–150 (inclusive) | > 150 | Pauses > 2.5s flagged |
+| `professional` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
+| `conversational` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
+| `educational` | < 110 | 110–145 (inclusive) | > 145 | Pauses > 2.5s flagged |
 | `persuasive` | < 140 | 140–170 (inclusive) | > 170 | Pauses > 2s flagged |
+| `storytelling` | < 120 | 120–160 (inclusive) | > 160 | Pauses > 3.5s flagged |
 
 ### Feedback Item Format
 

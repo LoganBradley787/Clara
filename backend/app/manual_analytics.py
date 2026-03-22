@@ -23,18 +23,20 @@ from app.models import (
 
 # Tone-based WPM ranges: (low_inclusive, high_inclusive)
 PACE_RANGES: Dict[str, tuple] = {
-    "formal": (130, 160),
-    "casual": (140, 180),
-    "informative": (120, 150),
+    "professional": (130, 160),
+    "conversational": (140, 180),
+    "educational": (110, 145),
     "persuasive": (140, 170),
+    "storytelling": (120, 160),
 }
 
 # Tone-based pause thresholds in seconds
 PAUSE_THRESHOLDS: Dict[str, float] = {
-    "formal": 2.0,
-    "casual": 3.0,
-    "informative": 2.5,
+    "professional": 2.0,
+    "conversational": 3.0,
+    "educational": 2.5,
     "persuasive": 2.0,
+    "storytelling": 3.5,
 }
 
 # Filler words
