@@ -1,12 +1,11 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { FillerInstance, FeedbackItem, FeedbackType, ObservationItem, ObservationType, WordTimestamp } from '../types';
+import type { FillerInstance, FeedbackItem, FeedbackType, WordTimestamp } from '../types';
 
 interface TranscriptPanelProps {
   transcript: string;
   fillerWords: FillerInstance[];
   feedback: FeedbackItem[];
-  observations?: ObservationItem[];
   expanded?: boolean;
   onToggle: () => void;
   words?: WordTimestamp[];
@@ -15,31 +14,22 @@ interface TranscriptPanelProps {
 
 const PREVIEW_LENGTH = 100;
 
-const annotationColors: Record<FeedbackType | ObservationType, string> = {
+const annotationColors: Record<FeedbackType, string> = {
   REPETITION: 'var(--cat-repetition)',
   HEDGE_STACK: 'var(--cat-hedge-stack)',
   FALSE_START: 'var(--cat-false-start)',
   SLIDE_READING: 'var(--cat-slide-reading)',
-  CONTENT_COVERAGE: 'var(--cat-content-coverage, #6366f1)',
-  TANGENT: 'var(--cat-tangent, #f59e0b)',
-  DEPTH_IMBALANCE: 'var(--cat-depth-imbalance, #8b5cf6)',
-  ABRUPT_TRANSITION: 'var(--cat-abrupt-transition, #ec4899)',
 };
 
-const annotationLabels: Record<FeedbackType | ObservationType, string> = {
+const annotationLabels: Record<FeedbackType, string> = {
   REPETITION: 'repetition',
   HEDGE_STACK: 'hedge stack',
   FALSE_START: 'false start',
   SLIDE_READING: 'slide reading',
-  CONTENT_COVERAGE: 'coverage',
-  TANGENT: 'tangent',
-  DEPTH_IMBALANCE: 'depth',
-  ABRUPT_TRANSITION: 'abrupt transition',
 };
 
-// Unified annotation item — can be a FeedbackItem or an inline ObservationItem
 type InlineAnnotation = {
-  type: FeedbackType | ObservationType;
+  type: FeedbackType;
   text: string;
   detail: string;
 };
@@ -61,7 +51,6 @@ function buildAnnotatedSegments(
   transcript: string,
   fillerWords: FillerInstance[],
   feedback: FeedbackItem[],
-  inlineObservations: ObservationItem[],
 ): TextSegment[] {
   if (!transcript) return [];
 
@@ -78,25 +67,6 @@ function buildAnnotatedSegments(
         kind: 'feedback',
         annotationItem: fb,
       });
-    }
-  }
-
-  // Inline observation annotations (TANGENT, ABRUPT_TRANSITION — those with text)
-  for (const obs of inlineObservations) {
-    if (!obs.text) continue;
-    const idx = transcript.toLowerCase().indexOf(obs.text.toLowerCase());
-    if (idx !== -1) {
-      const overlaps = regions.some(
-        (r) => idx < r.end && idx + obs.text!.length > r.start
-      );
-      if (!overlaps) {
-        regions.push({
-          start: idx,
-          end: idx + obs.text.length,
-          kind: 'feedback',
-          annotationItem: { type: obs.type, text: obs.text, detail: obs.detail },
-        });
-      }
     }
   }
 
@@ -235,29 +205,22 @@ export default function TranscriptPanel({
   transcript,
   fillerWords,
   feedback,
-  observations = [],
   expanded = false,
   onToggle,
   words,
   currentTime,
 }: TranscriptPanelProps) {
-  // Filter observations that have text (TANGENT, ABRUPT_TRANSITION) for inline rendering
-  const inlineObs = useMemo(
-    () => observations.filter((o) => o.text),
-    [observations],
-  );
-
   const segments = useMemo(
-    () => buildAnnotatedSegments(transcript, fillerWords, feedback, inlineObs),
-    [transcript, fillerWords, feedback, inlineObs],
+    () => buildAnnotatedSegments(transcript, fillerWords, feedback),
+    [transcript, fillerWords, feedback],
   );
 
   const isLong = transcript.length > PREVIEW_LENGTH;
-  const hasAnnotations = feedback.length > 0 || fillerWords.length > 0 || inlineObs.length > 0;
+  const hasAnnotations = feedback.length > 0 || fillerWords.length > 0;
   const autoExpand = !isLong && hasAnnotations;
   const showToggle = isLong;
 
-  const feedbackCount = feedback.length + inlineObs.length;
+  const feedbackCount = feedback.length;
 
   const activeWordIdx = useMemo(() => {
     if (currentTime == null || !words?.length) return -1;

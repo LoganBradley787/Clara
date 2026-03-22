@@ -24,9 +24,6 @@ class FeedbackType(str, Enum):
 
 class ObservationType(str, Enum):
     content_coverage = "CONTENT_COVERAGE"
-    tangent = "TANGENT"
-    depth_imbalance = "DEPTH_IMBALANCE"
-    abrupt_transition = "ABRUPT_TRANSITION"
 
 class ProcessingStatus(str, Enum):
     processing = "processing"
@@ -110,7 +107,6 @@ class FeedbackItem(BaseModel):
 class ObservationItem(BaseModel):
     type: ObservationType
     detail: str = Field(max_length=250)
-    text: Optional[str] = Field(default=None, max_length=200)
     evidence: Optional[Dict[str, object]] = None
 
 class SlideObservations(BaseModel):

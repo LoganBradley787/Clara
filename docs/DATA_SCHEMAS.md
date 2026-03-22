@@ -248,7 +248,7 @@ Output of the Snowflake Cortex LLM module. The LLM catches language-level patter
 
 ## 6b. Observation Output (Per Slide)
 
-Observations are holistic, slide-level assessments that complement the granular flags in §6. They cover content coverage, tangents, depth imbalance, and transitions. Observations are **optional** — most slides will have an empty array.
+Observations are holistic, slide-level assessments that complement the granular flags in §6. Currently only CONTENT_COVERAGE is supported. Observations are **optional** — most slides will have an empty array.
 
 ```json
 {
@@ -257,21 +257,10 @@ Observations are holistic, slide-level assessments that complement the granular 
       {
         "type": "CONTENT_COVERAGE",
         "detail": "Speaker addressed neural networks but skipped loss functions and backpropagation from the slide",
-        "text": null,
         "evidence": {
           "concepts_covered": ["neural networks", "training process"],
           "concepts_missed": ["loss functions", "backpropagation"]
         }
-      }
-    ]
-  },
-  "slide_1": {
-    "observations": [
-      {
-        "type": "TANGENT",
-        "detail": "Speaker diverged into personal anecdote unrelated to the slide's data analysis topic",
-        "text": "so actually last summer when I was at the beach I noticed",
-        "evidence": null
       }
     ]
   }
@@ -280,9 +269,8 @@ Observations are holistic, slide-level assessments that complement the granular 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | Yes | One of: `"CONTENT_COVERAGE"`, `"TANGENT"`, `"DEPTH_IMBALANCE"`, `"ABRUPT_TRANSITION"` |
+| `type` | string | Yes | `"CONTENT_COVERAGE"` |
 | `detail` | string | Yes | Explanation of the observation. Max 250 chars. |
-| `text` | string | No | Exact transcript quote (only for TANGENT and ABRUPT_TRANSITION). Max 200 chars. Null for holistic types. |
 | `evidence` | object | No | Structured data for visual rendering. Shape depends on type. |
 
 **Observation type definitions:**
@@ -290,16 +278,11 @@ Observations are holistic, slide-level assessments that complement the granular 
 | Type | What it catches | Requires PDF | Evidence shape |
 |------|----------------|-------------|----------------|
 | `CONTENT_COVERAGE` | Speaker skipped significant slide content | Yes (10+ words) | `{"concepts_covered": [...], "concepts_missed": [...]}` — LLM identifies concepts semantically |
-| `TANGENT` | Speaker went off-topic from slide content | Yes | None (uses `text` for inline annotation) |
-| `DEPTH_IMBALANCE` | Slide got disproportionate time vs content density | Yes (30+ words) | `{"content_pct": float, "time_pct": float}` — deterministic, no LLM |
-| `ABRUPT_TRANSITION` | No bridge from previous slide | No | None (uses `text` for inline annotation) |
 
 **Constraints:**
-- Maximum 2 observations per slide
+- Maximum 1 observation per slide
 - Empty array is the norm — observations are never forced
 - CONTENT_COVERAGE uses semantic concept matching (synonyms count as covered)
-- DEPTH_IMBALANCE only fires on slides with 30+ words of PDF text (excludes title slides, image-heavy slides)
-- ABRUPT_TRANSITION cannot appear on slide_0
 - No encouragement, praise, or subjective quality ratings
 
 ---

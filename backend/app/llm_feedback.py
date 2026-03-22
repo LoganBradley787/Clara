@@ -138,115 +138,6 @@ def _compute_text_similarity(transcript: str, slide_text: str) -> float:
     return len(overlap) / denominator
 
 
-def _compute_depth_ratios(
-    slide_transcript: Dict[str, SlideTranscript],
-    slide_texts: Dict[str, str],
-    min_pdf_words: int = 30,
-) -> Dict[str, Optional[Dict[str, float]]]:
-    """
-    Compute depth ratios for DEPTH_IMBALANCE detection.
-    Returns {slide_id: {"content_pct": float, "time_pct": float}} for imbalanced slides,
-    or None for slides that don't qualify.
-    """
-    total_duration = sum(
-        s.end_time - s.start_time for s in slide_transcript.values()
-    )
-    if total_duration <= 0:
-        return {sid: None for sid in slide_transcript}
-
-    # Count meaningful PDF words per slide (only slides with 30+ words)
-    pdf_word_counts: Dict[str, int] = {}
-    for slide_id, text in slide_texts.items():
-        words = _normalize(text).split()
-        pdf_word_counts[slide_id] = len(words)
-
-    total_pdf_words = sum(
-        c for sid, c in pdf_word_counts.items()
-        if c >= min_pdf_words
-    )
-    if total_pdf_words <= 0:
-        return {sid: None for sid in slide_transcript}
-
-    result: Dict[str, Optional[Dict[str, float]]] = {}
-    for slide_id, slide in slide_transcript.items():
-        wc = pdf_word_counts.get(slide_id, 0)
-        if wc < min_pdf_words:
-            result[slide_id] = None
-            continue
-
-        duration = slide.end_time - slide.start_time
-        time_pct = (duration / total_duration) * 100
-        content_pct = (wc / total_pdf_words) * 100
-
-        # Check for significant divergence (> 2.5x ratio)
-        if content_pct > 0 and time_pct > 0:
-            ratio = time_pct / content_pct
-            if ratio > 2.5 or ratio < 0.4:
-                result[slide_id] = {
-                    "content_pct": round(content_pct, 1),
-                    "time_pct": round(time_pct, 1),
-                }
-            else:
-                result[slide_id] = None
-        else:
-            result[slide_id] = None
-
-    return result
-
-
-def _extract_first_sentence(text: str) -> str:
-    """Extract the first sentence from a transcript."""
-    if not text:
-        return ""
-    # Split on sentence-ending punctuation
-    match = re.search(r"[.!?]", text)
-    if match:
-        return text[: match.end()].strip()
-    # No punctuation — return first 100 chars
-    return text[:100].strip()
-
-
-def _extract_last_sentence(text: str) -> str:
-    """Extract the last sentence from a transcript."""
-    if not text:
-        return ""
-    # Find all sentence boundaries
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    return sentences[-1].strip() if sentences else text[:100].strip()
-
-
-def _build_transition_context(
-    slide_transcript: Dict[str, SlideTranscript],
-) -> Dict[str, Optional[Dict[str, str]]]:
-    """
-    Build transition context for ABRUPT_TRANSITION detection.
-    Returns {slide_id: {"prev_last": str, "curr_first": str}} or None.
-    """
-    sorted_slides = sorted(
-        slide_transcript.items(),
-        key=lambda x: x[1].slide_index,
-    )
-    result: Dict[str, Optional[Dict[str, str]]] = {}
-
-    for i, (slide_id, slide) in enumerate(sorted_slides):
-        if i == 0:
-            result[slide_id] = None
-            continue
-
-        prev_slide = sorted_slides[i - 1][1]
-        prev_text = prev_slide.text.strip() if prev_slide.text else ""
-        curr_text = slide.text.strip() if slide.text else ""
-
-        if not prev_text or not curr_text:
-            result[slide_id] = None
-            continue
-
-        result[slide_id] = {
-            "prev_last": _extract_last_sentence(prev_text),
-            "curr_first": _extract_first_sentence(curr_text),
-        }
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -288,19 +179,11 @@ paraphrasing count as covered (e.g., "rocks" on slide + "gravel" in speech = cov
 Return evidence with "concepts_covered" and "concepts_missed" arrays. If all concepts \
 were addressed, do NOT observe CONTENT_COVERAGE.
 
-TANGENT — Speaker went off-topic from the slide content. ONLY when slide text is \
-provided. The "text" field must contain an exact quote of the tangent passage.
-
-ABRUPT_TRANSITION — No topical bridge from the previous slide. You will be given \
-the last sentence of the previous slide and the first sentence of the current slide. \
-The "text" field must quote the opening of the current slide.
-
 ## RULES:
 - Return a JSON object: {{"flags": [...], "observations": [...]}}
-- Return at most 2 flags and at most 2 observations per slide.
+- Return at most 2 flags and at most 1 observation per slide.
 - Empty arrays are expected for most slides. Never force output.
 - Flag "text" fields MUST contain an exact quote from the slide's transcript.
-- Observation "text" fields (TANGENT, ABRUPT_TRANSITION) must also be exact quotes.
 - Do NOT flag speaking pace, word count, duration, filler words, or pauses.
 - Do NOT provide encouragement, praise, or suggestions.
 - Do NOT flag grammar, vocabulary, or style choices.
@@ -326,8 +209,7 @@ Based ONLY on the evidence above, return a JSON object for Slide {slide_number}:
     {{"type": "REPETITION|HEDGE_STACK|FALSE_START|SLIDE_READING", "text": "exact quote", "detail": "under 200 chars"}}
   ],
   "observations": [
-    {{"type": "CONTENT_COVERAGE", "detail": "under 250 chars", "evidence": {{"concepts_covered": [...], "concepts_missed": [...]}}}},
-    {{"type": "TANGENT|ABRUPT_TRANSITION", "detail": "under 250 chars", "text": "exact quote"}}
+    {{"type": "CONTENT_COVERAGE", "detail": "under 250 chars", "evidence": {{"concepts_covered": [...], "concepts_missed": [...]}}}}
   ]
 }}
 
@@ -343,7 +225,6 @@ def _build_evidence_section(
     cross_slide_reps: Dict[str, List[int]],
     slide_text: str,
     similarity: float,
-    transition_ctx: Optional[Dict[str, str]],
 ) -> str:
     """
     Build the evidence block for the user prompt.
@@ -372,7 +253,7 @@ def _build_evidence_section(
             "PRE-COMPUTED CROSS-SLIDE REPETITIONS: None detected. Do NOT flag REPETITION."
         )
 
-    # Slide text + similarity for SLIDE_READING, CONTENT_COVERAGE, TANGENT
+    # Slide text + similarity for SLIDE_READING, CONTENT_COVERAGE
     if slide_text and similarity > 0.0:
         parts.append("")
         parts.append(f'SLIDE TEXT (from PDF): "{slide_text}"')
@@ -392,31 +273,12 @@ def _build_evidence_section(
             "Use semantic matching — synonyms and paraphrasing count as covered. "
             "Only observe CONTENT_COVERAGE if significant concepts were missed."
         )
-        parts.append(
-            "TANGENT DETECTION: If the transcript contains a passage unrelated to "
-            "the slide text or adjacent slides, observe TANGENT with an exact quote."
-        )
     else:
         parts.append("")
         parts.append(
             "SLIDE TEXT: Not available. Do NOT flag SLIDE_READING. "
-            "Do NOT observe CONTENT_COVERAGE or TANGENT."
+            "Do NOT observe CONTENT_COVERAGE."
         )
-
-    # Transition context for ABRUPT_TRANSITION
-    if transition_ctx:
-        parts.append("")
-        parts.append("TRANSITION CONTEXT:")
-        parts.append(f'  Previous slide ended with: "{transition_ctx["prev_last"]}"')
-        parts.append(f'  This slide begins with: "{transition_ctx["curr_first"]}"')
-        parts.append(
-            "Observe ABRUPT_TRANSITION only if there is NO topical connection "
-            "between these sentences. Normal topic shifts are fine."
-        )
-    else:
-        parts.append("")
-        parts.append("TRANSITION CONTEXT: Not available (first slide or empty neighbor). "
-                      "Do NOT observe ABRUPT_TRANSITION.")
 
     return "\n".join(parts)
 
@@ -627,30 +489,24 @@ def _validate_flags(
 
 def _validate_observations(
     items: List,
-    slide: SlideTranscript,
     slide_text: str,
-    transition_ctx: Optional[Dict[str, str]],
 ) -> List[ObservationItem]:
     """Validate observation items from LLM response."""
     if not isinstance(items, list):
         return []
 
-    slide_text_norm = _normalize(slide.text)
     pdf_word_count = len(_normalize(slide_text).split()) if slide_text else 0
     validated: List[ObservationItem] = []
 
-    for item in items[:2]:
+    for item in items[:1]:  # Max 1 observation per slide (CONTENT_COVERAGE only)
         if not isinstance(item, dict):
             continue
 
         obs_type = item.get("type")
-        if obs_type not in VALID_OBSERVATION_TYPES:
+        if obs_type != "CONTENT_COVERAGE":
             continue
 
         detail = str(item.get("detail", "")).strip()
-        text = item.get("text")
-        if text is not None:
-            text = str(text).strip()
         evidence = item.get("evidence")
 
         if not detail:
@@ -662,69 +518,30 @@ def _validate_observations(
         if any(phrase in lower_detail for phrase in BANNED_PHRASES):
             continue
 
-        # --- Post-validation per observation type ---
-
-        if obs_type == "CONTENT_COVERAGE":
-            if not slide_text or pdf_word_count < 10:
-                logger.info("Dropping CONTENT_COVERAGE: no PDF text or < 10 words")
-                continue
-            # Validate evidence structure
-            if not isinstance(evidence, dict):
-                logger.info("Dropping CONTENT_COVERAGE: missing evidence dict")
-                continue
-            concepts_missed = evidence.get("concepts_missed", [])
-            if not isinstance(concepts_missed, list) or len(concepts_missed) == 0:
-                logger.info("Dropping CONTENT_COVERAGE: no concepts_missed")
-                continue
-            concepts_covered = evidence.get("concepts_covered", [])
-            if not isinstance(concepts_covered, list):
-                concepts_covered = []
-            # Sanitize evidence to only contain string lists
-            evidence = {
-                "concepts_covered": [str(c) for c in concepts_covered[:10]],
-                "concepts_missed": [str(c) for c in concepts_missed[:10]],
-            }
-            text = None  # CONTENT_COVERAGE has no transcript quote
-
-        elif obs_type == "TANGENT":
-            if not slide_text:
-                logger.info("Dropping TANGENT: no PDF text available")
-                continue
-            if not text:
-                logger.info("Dropping TANGENT: no text quote provided")
-                continue
-            if len(text) > 200:
-                text = text[:197] + "..."
-            text_norm = _normalize(text)
-            if text_norm and text_norm not in slide_text_norm:
-                logger.info("Dropping TANGENT: quoted text not found in transcript")
-                continue
-            evidence = None
-
-        elif obs_type == "ABRUPT_TRANSITION":
-            if not transition_ctx:
-                logger.info("Dropping ABRUPT_TRANSITION: no transition context")
-                continue
-            if not text:
-                logger.info("Dropping ABRUPT_TRANSITION: no text quote provided")
-                continue
-            if len(text) > 200:
-                text = text[:197] + "..."
-            text_norm = _normalize(text)
-            if text_norm and text_norm not in slide_text_norm:
-                logger.info("Dropping ABRUPT_TRANSITION: quoted text not found in transcript")
-                continue
-            evidence = None
-
-        else:
-            # DEPTH_IMBALANCE is handled deterministically, not via LLM
+        if not slide_text or pdf_word_count < 10:
+            logger.info("Dropping CONTENT_COVERAGE: no PDF text or < 10 words")
             continue
+        # Validate evidence structure
+        if not isinstance(evidence, dict):
+            logger.info("Dropping CONTENT_COVERAGE: missing evidence dict")
+            continue
+        concepts_missed = evidence.get("concepts_missed", [])
+        if not isinstance(concepts_missed, list) or len(concepts_missed) == 0:
+            logger.info("Dropping CONTENT_COVERAGE: no concepts_missed")
+            continue
+        concepts_covered = evidence.get("concepts_covered", [])
+        if not isinstance(concepts_covered, list):
+            concepts_covered = []
+        # Sanitize evidence to only contain string lists
+        evidence = {
+            "concepts_covered": [str(c) for c in concepts_covered[:10]],
+            "concepts_missed": [str(c) for c in concepts_missed[:10]],
+        }
 
         validated.append(
             ObservationItem(
-                type=ObservationType(obs_type),
+                type=ObservationType.content_coverage,
                 detail=detail,
-                text=text,
                 evidence=evidence,
             )
         )
@@ -738,7 +555,6 @@ def _parse_and_validate(
     cross_slide_reps: Dict[str, List[int]],
     slide_text: str,
     similarity: float,
-    transition_ctx: Optional[Dict[str, str]],
 ) -> Tuple[List[FeedbackItem], List[ObservationItem]]:
     """Parse LLM JSON response and apply strict post-validation for both flags and observations."""
     parsed = _extract_json_object(raw)
@@ -749,7 +565,7 @@ def _parse_and_validate(
     )
     observations = _validate_observations(
         parsed.get("observations", []),
-        slide, slide_text, transition_ctx,
+        slide_text,
     )
 
     return flags, observations
@@ -786,12 +602,6 @@ async def generate_llm_feedback(
         pdf_text = slide_texts.get(slide_id, "").strip()
         similarities[slide_id] = _compute_text_similarity(slide.text, pdf_text)
 
-    # Pre-compute transition context
-    transition_contexts = _build_transition_context(slide_transcript)
-
-    # Pre-compute depth ratios (deterministic, no LLM)
-    depth_ratios = _compute_depth_ratios(slide_transcript, slide_texts)
-
     conn = await asyncio.to_thread(_get_snowflake_connection)
 
     try:
@@ -807,10 +617,9 @@ async def generate_llm_feedback(
 
             pdf_text = slide_texts.get(slide_id, "").strip()
             sim = similarities[slide_id]
-            t_ctx = transition_contexts.get(slide_id)
 
             evidence_section = _build_evidence_section(
-                slide, cross_slide_reps, pdf_text, sim, t_ctx,
+                slide, cross_slide_reps, pdf_text, sim,
             )
 
             user_prompt = USER_PROMPT_TEMPLATE.format(
@@ -828,7 +637,7 @@ async def generate_llm_feedback(
                     _call_cortex, conn, SYSTEM_PROMPT, user_prompt
                 )
                 feedback_items, obs_items = _parse_and_validate(
-                    raw, slide, cross_slide_reps, pdf_text, sim, t_ctx
+                    raw, slide, cross_slide_reps, pdf_text, sim
                 )
             except (json.JSONDecodeError, KeyError, TypeError) as exc:
                 logger.warning(
@@ -839,7 +648,7 @@ async def generate_llm_feedback(
                         _call_cortex, conn, SYSTEM_PROMPT, user_prompt
                     )
                     feedback_items, obs_items = _parse_and_validate(
-                        raw, slide, cross_slide_reps, pdf_text, sim, t_ctx
+                        raw, slide, cross_slide_reps, pdf_text, sim
                     )
                 except Exception as retry_exc:
                     logger.warning(
@@ -848,23 +657,6 @@ async def generate_llm_feedback(
                     )
                     feedback_items = []
                     obs_items = []
-
-            # Append deterministic DEPTH_IMBALANCE if applicable
-            depth_data = depth_ratios.get(slide_id)
-            if depth_data and len(obs_items) < 2:
-                content_pct = depth_data["content_pct"]
-                time_pct = depth_data["time_pct"]
-                obs_items.append(
-                    ObservationItem(
-                        type=ObservationType.depth_imbalance,
-                        detail=(
-                            f"This slide has {content_pct:.0f}% of total slide content "
-                            f"but received {time_pct:.0f}% of total speaking time"
-                        ),
-                        text=None,
-                        evidence=depth_data,
-                    )
-                )
 
             feedback_result[slide_id] = SlideFeedback(feedback=feedback_items)
             obs_result[slide_id] = SlideObservations(observations=obs_items)

@@ -87,12 +87,11 @@ export interface FeedbackItem {
   detail: string;
 }
 
-export type ObservationType = 'CONTENT_COVERAGE' | 'TANGENT' | 'DEPTH_IMBALANCE' | 'ABRUPT_TRANSITION';
+export type ObservationType = 'CONTENT_COVERAGE';
 
 export interface ObservationItem {
   type: ObservationType;
   detail: string;
-  text?: string;
   evidence?: Record<string, any>;
 }
 

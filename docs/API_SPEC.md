@@ -327,10 +327,9 @@ Each observation item in the `observations` array:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | Yes | `"CONTENT_COVERAGE"`, `"TANGENT"`, `"DEPTH_IMBALANCE"`, `"ABRUPT_TRANSITION"` |
+| `type` | string | Yes | `"CONTENT_COVERAGE"` |
 | `detail` | string | Yes | Explanation. Max 250 characters. |
-| `text` | string | No | Exact transcript quote (TANGENT, ABRUPT_TRANSITION only). Max 200 characters. |
-| `evidence` | object | No | Structured data for visual rendering. Shape depends on type — see `docs/DATA_SCHEMAS.md` §6b. |
+| `evidence` | object | No | `{"concepts_covered": [...], "concepts_missed": [...]}` — see `docs/DATA_SCHEMAS.md` §6b. |
 
 ### Metrics Fields
 
