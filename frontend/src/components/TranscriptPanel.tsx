@@ -1,11 +1,12 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { FillerInstance, FeedbackItem, FeedbackType, WordTimestamp } from '../types';
+import type { FillerInstance, FeedbackItem, FeedbackType, ObservationItem, ObservationType, WordTimestamp } from '../types';
 
 interface TranscriptPanelProps {
   transcript: string;
   fillerWords: FillerInstance[];
   feedback: FeedbackItem[];
+  observations?: ObservationItem[];
   expanded?: boolean;
   onToggle: () => void;
   words?: WordTimestamp[];
@@ -14,37 +15,53 @@ interface TranscriptPanelProps {
 
 const PREVIEW_LENGTH = 100;
 
-const feedbackColors: Record<FeedbackType, string> = {
+const annotationColors: Record<FeedbackType | ObservationType, string> = {
   REPETITION: 'var(--cat-repetition)',
   HEDGE_STACK: 'var(--cat-hedge-stack)',
   FALSE_START: 'var(--cat-false-start)',
   SLIDE_READING: 'var(--cat-slide-reading)',
+  CONTENT_COVERAGE: 'var(--cat-content-coverage, #6366f1)',
+  TANGENT: 'var(--cat-tangent, #f59e0b)',
+  DEPTH_IMBALANCE: 'var(--cat-depth-imbalance, #8b5cf6)',
+  ABRUPT_TRANSITION: 'var(--cat-abrupt-transition, #ec4899)',
 };
 
-const feedbackLabels: Record<FeedbackType, string> = {
+const annotationLabels: Record<FeedbackType | ObservationType, string> = {
   REPETITION: 'repetition',
   HEDGE_STACK: 'hedge stack',
   FALSE_START: 'false start',
   SLIDE_READING: 'slide reading',
+  CONTENT_COVERAGE: 'coverage',
+  TANGENT: 'tangent',
+  DEPTH_IMBALANCE: 'depth',
+  ABRUPT_TRANSITION: 'abrupt transition',
+};
+
+// Unified annotation item — can be a FeedbackItem or an inline ObservationItem
+type InlineAnnotation = {
+  type: FeedbackType | ObservationType;
+  text: string;
+  detail: string;
 };
 
 interface AnnotationRegion {
   start: number;
   end: number;
   kind: 'filler' | 'feedback';
-  feedbackItem?: FeedbackItem;
+  annotationItem?: InlineAnnotation;
 }
 
 interface TextSegment {
   text: string;
   kind: 'plain' | 'filler' | 'feedback';
-  feedbackItem?: FeedbackItem;
+  annotationItem?: InlineAnnotation;
 }
 
 function buildAnnotatedSegments(
   transcript: string,
   fillerWords: FillerInstance[],
   feedback: FeedbackItem[],
+  inlineObservations: ObservationItem[],
 ): TextSegment[] {
   if (!transcript) return [];
 
@@ -59,8 +76,27 @@ function buildAnnotatedSegments(
         start: idx,
         end: idx + fb.text.length,
         kind: 'feedback',
-        feedbackItem: fb,
+        annotationItem: fb,
       });
+    }
+  }
+
+  // Inline observation annotations (TANGENT, ABRUPT_TRANSITION — those with text)
+  for (const obs of inlineObservations) {
+    if (!obs.text) continue;
+    const idx = transcript.toLowerCase().indexOf(obs.text.toLowerCase());
+    if (idx !== -1) {
+      const overlaps = regions.some(
+        (r) => idx < r.end && idx + obs.text!.length > r.start
+      );
+      if (!overlaps) {
+        regions.push({
+          start: idx,
+          end: idx + obs.text.length,
+          kind: 'feedback',
+          annotationItem: { type: obs.type, text: obs.text, detail: obs.detail },
+        });
+      }
     }
   }
 
@@ -93,7 +129,7 @@ function buildAnnotatedSegments(
     segments.push({
       text: transcript.slice(region.start, region.end),
       kind: region.kind,
-      feedbackItem: region.feedbackItem,
+      annotationItem: region.annotationItem,
     });
     cursor = region.end;
   }
@@ -104,12 +140,23 @@ function buildAnnotatedSegments(
   return segments;
 }
 
-function FeedbackAnnotation({ item, text }: { item: FeedbackItem; text: string }) {
+function InlineAnnotationMark({ item, text }: { item: InlineAnnotation; text: string }) {
   const [showDetail, setShowDetail] = useState(false);
-  const color = feedbackColors[item.type];
+  const [alignRight, setAlignRight] = useState(false);
+  const markRef = useRef<HTMLSpanElement>(null);
+  const color = annotationColors[item.type];
+  const label = annotationLabels[item.type];
+
+  useEffect(() => {
+    if (showDetail && markRef.current) {
+      const rect = markRef.current.getBoundingClientRect();
+      // If less than 300px of space to the right, flip to right-aligned
+      setAlignRight(rect.left + 280 > window.innerWidth);
+    }
+  }, [showDetail]);
 
   return (
-    <span style={{ position: 'relative', display: 'inline' }}>
+    <span ref={markRef} style={{ position: 'relative', display: 'inline' }}>
       <mark
         onClick={() => setShowDetail((p) => !p)}
         style={{
@@ -144,7 +191,7 @@ function FeedbackAnnotation({ item, text }: { item: FeedbackItem; text: string }
             userSelect: 'none',
           }}
         >
-          {feedbackLabels[item.type]}
+          {label}
         </span>
       </mark>
       <AnimatePresence>
@@ -156,7 +203,7 @@ function FeedbackAnnotation({ item, text }: { item: FeedbackItem; text: string }
             transition={{ duration: 0.15 }}
             style={{
               position: 'absolute',
-              left: 0,
+              ...(alignRight ? { right: 0 } : { left: 0 }),
               top: '100%',
               marginTop: 4,
               zIndex: 10,
@@ -188,22 +235,29 @@ export default function TranscriptPanel({
   transcript,
   fillerWords,
   feedback,
+  observations = [],
   expanded = false,
   onToggle,
   words,
   currentTime,
 }: TranscriptPanelProps) {
+  // Filter observations that have text (TANGENT, ABRUPT_TRANSITION) for inline rendering
+  const inlineObs = useMemo(
+    () => observations.filter((o) => o.text),
+    [observations],
+  );
+
   const segments = useMemo(
-    () => buildAnnotatedSegments(transcript, fillerWords, feedback),
-    [transcript, fillerWords, feedback],
+    () => buildAnnotatedSegments(transcript, fillerWords, feedback, inlineObs),
+    [transcript, fillerWords, feedback, inlineObs],
   );
 
   const isLong = transcript.length > PREVIEW_LENGTH;
-  const hasAnnotations = feedback.length > 0 || fillerWords.length > 0;
+  const hasAnnotations = feedback.length > 0 || fillerWords.length > 0 || inlineObs.length > 0;
   const autoExpand = !isLong && hasAnnotations;
   const showToggle = isLong;
 
-  const feedbackCount = feedback.length;
+  const feedbackCount = feedback.length + inlineObs.length;
 
   const activeWordIdx = useMemo(() => {
     if (currentTime == null || !words?.length) return -1;
@@ -272,11 +326,11 @@ export default function TranscriptPanel({
             })
           ) : (
             segments.map((seg, i) => {
-              if (seg.kind === 'feedback' && seg.feedbackItem) {
+              if (seg.kind === 'feedback' && seg.annotationItem) {
                 return (
-                  <FeedbackAnnotation
+                  <InlineAnnotationMark
                     key={i}
-                    item={seg.feedbackItem}
+                    item={seg.annotationItem}
                     text={seg.text}
                   />
                 );

@@ -11,9 +11,11 @@ import AudioPlayer from '../components/AudioPlayer';
 import PresentationTimeline from '../components/PresentationTimeline';
 import MetricsPanel from '../components/MetricsPanel';
 import TranscriptPanel from '../components/TranscriptPanel';
+import CoverageChecklist from '../components/CoverageChecklist';
+import DepthBar from '../components/DepthBar';
 import SlideCarousel from '../components/SlideCarousel';
 import ChatPanel from '../components/ChatPanel';
-import type { PresentationResults } from '../types';
+import type { PresentationResults, ObservationItem } from '../types';
 
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
@@ -357,11 +359,24 @@ export default function ResultsPage() {
                   )}
                 </section>
 
-                {/* Transcript + Inline Feedback */}
+                {/* Observations (visual: CoverageChecklist, DepthBar) */}
+                {slide && slide.observations && slide.observations.length > 0 && (() => {
+                  const coverageObs = slide.observations.find((o: ObservationItem) => o.type === 'CONTENT_COVERAGE');
+                  const depthObs = slide.observations.find((o: ObservationItem) => o.type === 'DEPTH_IMBALANCE');
+                  if (!coverageObs && !depthObs) return null;
+                  return (
+                    <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                      {coverageObs && <CoverageChecklist observation={coverageObs} />}
+                      {depthObs && <DepthBar observation={depthObs} />}
+                    </section>
+                  );
+                })()}
+
+                {/* Transcript + Inline Feedback + Inline Observations */}
                 <section ref={transcriptRef} style={cardStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
                     <h3 style={{ ...sectionHeadingStyle, marginBottom: 0 }}>Transcript</h3>
-                    {slide && slide.feedback.length > 0 && (
+                    {slide && (slide.feedback.length > 0 || (slide.observations ?? []).filter((o: ObservationItem) => o.text).length > 0) && (
                       <span
                         style={{
                           fontFamily: 'var(--font-body)',
@@ -370,7 +385,7 @@ export default function ResultsPage() {
                           fontWeight: 500,
                         }}
                       >
-                        {slide.feedback.length} inline annotation{slide.feedback.length > 1 ? 's' : ''}
+                        {slide.feedback.length + (slide.observations ?? []).filter((o: ObservationItem) => o.text).length} inline annotation{(slide.feedback.length + (slide.observations ?? []).filter((o: ObservationItem) => o.text).length) > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
@@ -379,6 +394,7 @@ export default function ResultsPage() {
                       transcript={slide.transcript}
                       fillerWords={slide.metrics.filler_words.instances}
                       feedback={slide.feedback}
+                      observations={slide.observations}
                       expanded={transcriptExpanded}
                       onToggle={() => setTranscriptExpanded((p) => !p)}
                       words={slide.words}

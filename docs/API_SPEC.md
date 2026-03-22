@@ -257,14 +257,20 @@ Retrieve final processed results.
       },
       "feedback": [
         {
-          "category": "pacing",
-          "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for professional presentations. Consider increasing pace slightly on this introductory slide.",
-          "severity": "observation"
-        },
+          "type": "REPETITION",
+          "text": "climate change",
+          "detail": "Phrase 'climate change' also appears on slides 2 and 4"
+        }
+      ],
+      "observations": [
         {
-          "category": "repetition",
-          "comment": "The phrase 'climate change' appears 3 times in 45 seconds. Consider using synonyms like 'global warming' or 'environmental shifts' for variety.",
-          "severity": "suggestion"
+          "type": "CONTENT_COVERAGE",
+          "detail": "Speaker covered climate change effects but skipped mitigation strategies from the slide",
+          "text": null,
+          "evidence": {
+            "concepts_covered": ["climate change", "coastal communities"],
+            "concepts_missed": ["mitigation strategies", "policy proposals"]
+          }
         }
       ]
     }
@@ -311,9 +317,20 @@ Each feedback item in the `feedback` array:
 
 | Field | Type | Values | Description |
 |-------|------|--------|-------------|
-| `category` | string | `"pacing"`, `"repetition"`, `"clarity"`, `"diction"`, `"structure"`, `"timing"` | What aspect of speaking the comment addresses |
-| `comment` | string | — | Specific, actionable observation. Must reference concrete data from the transcript. Max 200 characters. |
-| `severity` | string | `"observation"`, `"suggestion"` | `observation` = neutral data point. `suggestion` = actionable recommendation. |
+| `type` | string | `"REPETITION"`, `"HEDGE_STACK"`, `"FALSE_START"`, `"SLIDE_READING"` | Flag type — see `docs/SERVICE_LLM.md` for definitions |
+| `text` | string | — | Exact quote from the transcript that triggered this flag. Max 200 characters. |
+| `detail` | string | — | Brief explanation. Max 200 characters. |
+
+### Observation Item Format
+
+Each observation item in the `observations` array:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | Yes | `"CONTENT_COVERAGE"`, `"TANGENT"`, `"DEPTH_IMBALANCE"`, `"ABRUPT_TRANSITION"` |
+| `detail` | string | Yes | Explanation. Max 250 characters. |
+| `text` | string | No | Exact transcript quote (TANGENT, ABRUPT_TRANSITION only). Max 200 characters. |
+| `evidence` | object | No | Structured data for visual rendering. Shape depends on type — see `docs/DATA_SCHEMAS.md` §6b. |
 
 ### Metrics Fields
 
