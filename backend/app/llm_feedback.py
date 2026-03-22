@@ -602,6 +602,15 @@ async def generate_coaching_summary(
         conn.close()
 
 
+def _humanize_slide_refs(text: str) -> str:
+    """Replace slide_N references in text with human-friendly 'Slide N+1'."""
+    return re.sub(
+        r"slide_(\d+)",
+        lambda m: f"Slide {int(m.group(1)) + 1}",
+        text,
+    )
+
+
 def _parse_coaching_tips(raw: str, results: PresentationResults) -> List[CoachingTip]:
     json_str = _extract_json_array(raw)
     items = json.loads(json_str)
@@ -614,8 +623,8 @@ def _parse_coaching_tips(raw: str, results: PresentationResults) -> List[Coachin
     for item in items[:3]:
         if not isinstance(item, dict):
             continue
-        title = str(item.get("title", "")).strip()
-        explanation = str(item.get("explanation", "")).strip()
+        title = _humanize_slide_refs(str(item.get("title", "")).strip())
+        explanation = _humanize_slide_refs(str(item.get("explanation", "")).strip())
         refs = item.get("slide_references", [])
 
         if not title or not explanation:

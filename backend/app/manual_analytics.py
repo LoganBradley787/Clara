@@ -4,10 +4,13 @@ Manual analytics module — pure computation, no I/O, no LLM calls.
 Computes per-slide speaking metrics from word-level transcript data.
 """
 
+import logging
 import math
 import string
 from collections import Counter
 from typing import Dict
+
+logger = logging.getLogger("clara.manual_analytics")
 
 from app.models import (
     Expectations,
@@ -87,8 +90,17 @@ def _compute_filler_words(slide: SlideTranscript) -> FillerInfo:
 def _compute_pauses(slide: SlideTranscript, threshold: float) -> PauseInfo:
     instances = []
     words = slide.words
+    logger.warning("[PAUSE DIAG] threshold=%.2fs, word_count=%d", threshold, len(words))
     for i in range(len(words) - 1):
         gap = words[i + 1].start - words[i].end
+        start_delta = words[i + 1].start - words[i].start
+        logger.warning(
+            "[PAUSE DIAG]   %r (s=%.3f e=%.3f) -> %r (s=%.3f) | gap=%.3f start_delta=%.3f %s",
+            words[i].word, words[i].start, words[i].end,
+            words[i + 1].word, words[i + 1].start,
+            gap, start_delta,
+            "<<< PAUSE" if gap > threshold else "",
+        )
         if gap > threshold:
             pause_start = words[i].end
             pause_end = words[i + 1].start
@@ -96,6 +108,7 @@ def _compute_pauses(slide: SlideTranscript, threshold: float) -> PauseInfo:
             instances.append(
                 PauseInstance(start=pause_start, end=pause_end, duration_seconds=duration)
             )
+    logger.warning("[PAUSE DIAG] Found %d pauses out of %d word pairs", len(instances), max(len(words) - 1, 0))
     return PauseInfo(count=len(instances), instances=instances)
 
 

@@ -199,6 +199,8 @@ export default function TranscriptPanel({
   );
 
   const isLong = transcript.length > PREVIEW_LENGTH;
+  const hasAnnotations = feedback.length > 0 || fillerWords.length > 0;
+  const autoExpand = !isLong && hasAnnotations;
   const showToggle = isLong;
 
   const feedbackCount = feedback.length;
@@ -249,7 +251,7 @@ export default function TranscriptPanel({
           lineHeight: 1.7,
         }}
       >
-        {expanded ? (
+        {expanded || autoExpand ? (
           hasPlayback ? (
             words.map((w, i) => {
               const isActive = i === activeWordIdx;
