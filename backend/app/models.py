@@ -5,27 +5,22 @@ from enum import Enum
 # --- Enums ---
 
 class Tone(str, Enum):
-    formal = "formal"
-    casual = "casual"
-    informative = "informative"
+    professional = "professional"
+    conversational = "conversational"
+    educational = "educational"
     persuasive = "persuasive"
+    storytelling = "storytelling"
 
 class SpeakingPace(str, Enum):
     slow = "slow"
     normal = "normal"
     fast = "fast"
 
-class FeedbackCategory(str, Enum):
-    pacing = "pacing"
-    repetition = "repetition"
-    clarity = "clarity"
-    diction = "diction"
-    structure = "structure"
-    timing = "timing"
-
-class Severity(str, Enum):
-    observation = "observation"
-    suggestion = "suggestion"
+class FeedbackType(str, Enum):
+    repetition = "REPETITION"
+    hedge_stack = "HEDGE_STACK"
+    false_start = "FALSE_START"
+    slide_reading = "SLIDE_READING"
 
 class ProcessingStatus(str, Enum):
     processing = "processing"
@@ -102,9 +97,9 @@ class SlideMetrics(BaseModel):
 # --- LLM feedback output ---
 
 class FeedbackItem(BaseModel):
-    category: FeedbackCategory
-    comment: str = Field(max_length=200)
-    severity: Severity
+    type: FeedbackType
+    text: str = Field(max_length=200)
+    detail: str = Field(max_length=200)
 
 class SlideFeedback(BaseModel):
     feedback: List[FeedbackItem]
@@ -130,11 +125,17 @@ class OverallMetrics(BaseModel):
     actual_duration_seconds: float
     duration_deviation_seconds: float
 
+class CoachingTip(BaseModel):
+    title: str = Field(max_length=100)
+    explanation: str = Field(max_length=300)
+    slide_references: List[str]
+
 class PresentationResults(BaseModel):
     presentation_id: str
     total_slides: int
     total_duration_seconds: float
     overall_metrics: OverallMetrics
+    coaching_summary: List[CoachingTip]
     slides: Dict[str, AggregatedSlide]
 
 # --- API response types ---
@@ -156,6 +157,12 @@ class StatusResponse(BaseModel):
     progress: Optional[ProgressInfo] = None
     error: Optional[str] = None
     message: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+
+class ChatResponse(BaseModel):
+    response: str
 
 class ErrorResponse(BaseModel):
     error: str

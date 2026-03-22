@@ -1,5 +1,6 @@
-from typing import Dict
+from typing import Dict, List, Optional
 from app.models import (
+    CoachingTip,
     SlideTranscript, SlideMetrics, SlideFeedback, Expectations,
     AggregatedSlide, OverallMetrics, PresentationResults,
 )
@@ -12,6 +13,7 @@ def aggregate_results(
     expectations: Expectations,
     total_duration: float,
     presentation_id: str = "",
+    coaching_summary: Optional[List[CoachingTip]] = None,
 ) -> PresentationResults:
     slides = {}
     total_word_count = 0
@@ -57,5 +59,6 @@ def aggregate_results(
             actual_duration_seconds=total_duration,
             duration_deviation_seconds=round(total_duration - expected_secs, 1),
         ),
+        coaching_summary=coaching_summary or [],
         slides=slides,
     )

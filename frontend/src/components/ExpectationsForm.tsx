@@ -8,11 +8,12 @@ interface ExpectationsFormProps {
   disabled?: boolean;
 }
 
-const TONE_OPTIONS: { value: Tone; label: string }[] = [
-  { value: 'formal', label: 'Formal' },
-  { value: 'casual', label: 'Casual' },
-  { value: 'informative', label: 'Informative' },
-  { value: 'persuasive', label: 'Persuasive' },
+const TONE_OPTIONS: { value: Tone; label: string; description: string }[] = [
+  { value: 'professional', label: 'Professional', description: 'Board rooms, client reviews, formal reports' },
+  { value: 'conversational', label: 'Conversational', description: 'Team syncs, demos, casual updates' },
+  { value: 'educational', label: 'Educational', description: 'Lectures, workshops, training sessions' },
+  { value: 'persuasive', label: 'Persuasive', description: 'Pitches, proposals, fundraising asks' },
+  { value: 'storytelling', label: 'Storytelling', description: 'Keynotes, narratives, personal talks' },
 ];
 
 const CONTEXT_MAX = 500;
@@ -126,53 +127,93 @@ export default function ExpectationsForm({ onSubmit, onValidityChange, disabled 
         <motion.div
           variants={fieldVariants}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
         >
-          <label className="category-label" htmlFor="tone-select" style={{ color: 'var(--text-secondary)' }}>
+          <label className="category-label" style={{ color: 'var(--text-secondary)' }}>
             Tone
           </label>
-          <div style={{ position: 'relative' }}>
-            <select
-              id="tone-select"
-              value={tone}
-              onChange={(e) => setTone(e.target.value as Tone)}
-              onBlur={(e) => {
-                markTouched('tone');
-                handleBlurStyle('tone')(e);
-              }}
-              onFocus={handleFocus('tone')}
-              disabled={disabled}
-              style={{
-                ...inputBase,
-                color: tone ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                border: borderFor('tone'),
-                paddingRight: 'var(--space-7)',
-                appearance: 'none',
-                cursor: disabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              <option value="" disabled>
-                Choose a tone…
-              </option>
-              {TONE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <div
-              style={{
-                position: 'absolute',
-                right: 'var(--space-4)',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                pointerEvents: 'none',
-                color: 'var(--text-tertiary)',
-                fontSize: 'var(--text-xs)',
-              }}
-            >
-              ▾
-            </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-2)',
+              flexWrap: 'wrap',
+            }}
+            role="radiogroup"
+            aria-label="Presentation tone"
+          >
+            {TONE_OPTIONS.map((opt) => {
+              const selected = tone === opt.value;
+              return (
+                <motion.button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setTone(opt.value);
+                    markTouched('tone');
+                  }}
+                  disabled={disabled}
+                  whileHover={!disabled ? { y: -2 } : {}}
+                  whileTap={!disabled ? { scale: 0.97 } : {}}
+                  style={{
+                    flex: '1 1 0',
+                    minWidth: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-1)',
+                    padding: 'var(--space-3) var(--space-3)',
+                    borderRadius: 'var(--radius-md)',
+                    border: selected
+                      ? '1.5px solid var(--accent)'
+                      : '1px solid var(--border-subtle)',
+                    background: selected ? 'var(--accent-muted)' : 'var(--bg-base)',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.5 : 1,
+                    transition: 'border-color 180ms ease, background 180ms ease, box-shadow 180ms ease',
+                    boxShadow: selected ? '0 0 0 2px var(--accent-muted)' : 'none',
+                    textAlign: 'left',
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!selected && !disabled) {
+                      e.currentTarget.style.borderColor = 'var(--border-strong)';
+                      e.currentTarget.style.background = 'var(--bg-elevated)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!selected && !disabled) {
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                      e.currentTarget.style.background = 'var(--bg-base)';
+                    }
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontWeight: 600,
+                      fontSize: 'var(--text-sm)',
+                      color: selected ? 'var(--accent)' : 'var(--text-primary)',
+                      transition: 'color 180ms ease',
+                    }}
+                  >
+                    {opt.label}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '0.65rem',
+                      lineHeight: 1.35,
+                      color: selected ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+                      transition: 'color 180ms ease',
+                    }}
+                  >
+                    {opt.description}
+                  </span>
+                </motion.button>
+              );
+            })}
           </div>
           {errors.tone && (
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>

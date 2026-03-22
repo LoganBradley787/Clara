@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 const rise = {
   initial: { opacity: 0, y: 24 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] } },
 };
 const fadeIn = {
   initial: { opacity: 0 },
@@ -70,21 +70,21 @@ const PROBLEMS = [
 const CAPABILITIES = [
   {
     title: 'Words Per Minute',
-    description: 'Per-slide pace measurement calibrated to your chosen tone — formal, casual, informative, or persuasive — each with its own benchmarks.',
-    color: 'var(--cat-pacing)',
-    tag: 'pacing',
+    description: 'Per-slide pace measurement calibrated to your presentation style — professional, conversational, educational, persuasive, or storytelling — each with its own benchmarks.',
+    color: '#2B5F8A',
+    tag: 'metrics',
   },
   {
     title: 'Filler Word Detection',
     description: 'Catches um, uh, like, you know, basically, actually, literally, right, I mean, kind of, and sort of. Every instance timestamped.',
-    color: 'var(--cat-diction)',
-    tag: 'diction',
+    color: '#6B4C8A',
+    tag: 'detection',
   },
   {
     title: 'Pause Analysis',
-    description: 'Identifies pauses that exceed tone-appropriate thresholds. A 2-second pause in a formal talk is notable; in casual conversation, it\'s nothing.',
-    color: 'var(--cat-timing)',
-    tag: 'timing',
+    description: 'Identifies pauses that exceed tone-appropriate thresholds. A 2-second pause in a professional setting is notable; in conversation, it\'s nothing.',
+    color: '#A13B3B',
+    tag: 'analysis',
   },
   {
     title: 'Repetition Tracking',
@@ -94,15 +94,15 @@ const CAPABILITIES = [
   },
   {
     title: 'Targeted Feedback',
-    description: 'AI-generated observations grounded in your transcript. No generic encouragement — every comment references specific words, slides, and patterns.',
-    color: 'var(--cat-clarity)',
-    tag: 'clarity',
+    description: 'AI-generated flags grounded in your transcript. No generic encouragement — every flag references specific words, slides, and patterns.',
+    color: 'var(--cat-hedge-stack)',
+    tag: 'feedback',
   },
   {
     title: 'Slide-by-Slide Breakdown',
     description: 'Every metric and feedback item is scoped to a single slide. See exactly where your presentation is strong and where it needs work.',
-    color: 'var(--cat-structure)',
-    tag: 'structure',
+    color: 'var(--cat-slide-reading)',
+    tag: 'breakdown',
   },
 ];
 
@@ -135,15 +135,15 @@ export default function LandingPage() {
         <div
           style={{
             position: 'absolute',
-            top: '30%',
+            top: '45%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: '60vw',
-            height: '60vw',
-            maxWidth: 700,
-            maxHeight: 700,
+            width: '80vw',
+            height: '80vw',
+            maxWidth: 900,
+            maxHeight: 900,
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(122, 44, 48, 0.25) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(122, 44, 48, 0.2) 0%, transparent 70%)',
             pointerEvents: 'none',
           }}
         />
@@ -153,13 +153,12 @@ export default function LandingPage() {
           initial="initial"
           animate="animate"
           style={{
-            maxWidth: 800,
             width: '100%',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            gap: 'var(--space-6)',
+            gap: 'var(--space-5)',
             position: 'relative',
             zIndex: 1,
           }}
@@ -173,7 +172,7 @@ export default function LandingPage() {
                 letterSpacing: '0.18em',
               }}
             >
-              Presentation Telemetry
+              Your Presentation Assistant
             </span>
           </motion.div>
 
@@ -181,10 +180,10 @@ export default function LandingPage() {
             variants={rise}
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(3rem, 8vw, 5.5rem)',
+              fontSize: 'clamp(5rem, 18vw, 14rem)',
               color: 'var(--text-on-dark)',
-              letterSpacing: '-0.03em',
-              lineHeight: 1.05,
+              letterSpacing: '-0.04em',
+              lineHeight: 0.9,
             }}
           >
             Clara
@@ -195,154 +194,123 @@ export default function LandingPage() {
             style={{
               fontFamily: 'var(--font-display)',
               fontStyle: 'italic',
-              fontSize: 'clamp(1.25rem, 3vw, 1.75rem)',
+              fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)',
               color: 'var(--text-on-dark-muted)',
               lineHeight: 1.4,
-              maxWidth: 600,
+              marginTop: 'var(--space-2)',
             }}
           >
             Know exactly how you sound, slide by slide.
           </motion.p>
 
-          <motion.p
+          <motion.button
             variants={rise}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => navigate('/setup')}
             style={{
               fontFamily: 'var(--font-body)',
               fontSize: 'var(--text-base)',
-              color: 'rgba(196, 169, 143, 0.8)',
-              lineHeight: 1.7,
-              maxWidth: 520,
+              fontWeight: 500,
+              color: 'var(--text-on-dark)',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-3) var(--space-6)',
+              cursor: 'pointer',
+              marginTop: 'var(--space-4)',
+              transition: 'background 150ms ease',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent)')}
           >
-            Record a practice run of your talk. Clara transcribes your audio, maps every word to the slide 
-            it belongs to, and produces a diagnostic breakdown of your speaking patterns — pacing, filler 
-            words, pauses, repetition — with feedback calibrated to your context.
-          </motion.p>
+            Start a Session &rarr;
+          </motion.button>
 
-          <motion.div
-            variants={rise}
-            style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', justifyContent: 'center' }}
-          >
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/setup')}
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 500,
-                color: 'var(--text-on-dark)',
-                background: 'var(--accent)',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-3) var(--space-6)',
-                cursor: 'pointer',
-                transition: 'background 150ms ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent)')}
-            >
-              Start a Session &rarr;
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => {
-                document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 500,
-                color: 'var(--text-on-dark-muted)',
-                background: 'transparent',
-                border: '1px solid rgba(196, 169, 143, 0.3)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-3) var(--space-6)',
-                cursor: 'pointer',
-                transition: 'border-color 150ms ease, color 150ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(196, 169, 143, 0.6)';
-                e.currentTarget.style.color = 'var(--text-on-dark)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(196, 169, 143, 0.3)';
-                e.currentTarget.style.color = 'var(--text-on-dark-muted)';
-              }}
-            >
-              See How It Works
-            </motion.button>
-          </motion.div>
-
-          {/* Mock metrics preview */}
           <motion.div
             variants={rise}
             style={{
-              marginTop: 'var(--space-6)',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 'var(--space-4)',
-              width: '100%',
-              maxWidth: 640,
+              marginTop: 'var(--space-7)',
+              perspective: 900,
             }}
           >
-            {METRICS_PREVIEW.map((m) => (
-              <div
-                key={m.label}
-                style={{
-                  background: 'rgba(250, 246, 241, 0.06)',
-                  border: '1px solid rgba(250, 246, 241, 0.08)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: 'var(--space-3) var(--space-3)',
-                  textAlign: 'left',
-                }}
-              >
-                <div
-                  className="category-label"
-                  style={{ color: 'var(--text-on-dark-muted)', fontSize: '0.625rem', marginBottom: 'var(--space-1)' }}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 'var(--space-3)',
+                width: '100%',
+                maxWidth: 580,
+                transform: 'rotateX(4deg) rotateY(-1deg)',
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              {METRICS_PREVIEW.map((m, i) => (
+                <motion.div
+                  key={m.label}
+                  animate={{ y: [0, -4, 0] }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 4,
+                    ease: 'easeInOut',
+                    delay: i * 0.4,
+                  }}
+                  style={{
+                    background: 'rgba(250, 246, 241, 0.05)',
+                    border: '1px solid rgba(250, 246, 241, 0.08)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-3)',
+                    textAlign: 'left',
+                    backdropFilter: 'blur(8px)',
+                  }}
                 >
-                  {m.label}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <span
-                    className="metric-value"
-                    style={{ color: 'var(--text-on-dark)', fontSize: 'var(--text-xl)' }}
+                  <div
+                    className="category-label"
+                    style={{ color: 'var(--text-on-dark-muted)', fontSize: '0.625rem', marginBottom: 'var(--space-1)' }}
                   >
-                    {m.value}
-                  </span>
-                  {m.badge && (
+                    {m.label}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
                     <span
+                      className="metric-value"
+                      style={{ color: 'var(--text-on-dark)', fontSize: 'var(--text-xl)' }}
+                    >
+                      {m.value}
+                    </span>
+                    {m.badge && (
+                      <span
+                        style={{
+                          fontSize: '0.6rem',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          color: '#fff',
+                          background: m.badgeColor,
+                          borderRadius: '9999px',
+                          padding: '1px 6px',
+                          alignSelf: 'flex-start',
+                        }}
+                      >
+                        {m.badge}
+                      </span>
+                    )}
+                  </div>
+                  {m.sub && (
+                    <div
                       style={{
-                        fontSize: '0.6rem',
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        color: '#fff',
-                        background: m.badgeColor,
-                        borderRadius: '9999px',
-                        padding: '1px 6px',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.625rem',
+                        color: 'rgba(196, 169, 143, 0.6)',
+                        marginTop: 'var(--space-1)',
+                        lineHeight: 1.4,
                       }}
                     >
-                      {m.badge}
-                    </span>
+                      {m.sub}
+                    </div>
                   )}
-                </div>
-                {m.sub && (
-                  <div
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '0.625rem',
-                      color: 'rgba(196, 169, 143, 0.6)',
-                      marginTop: 'var(--space-1)',
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {m.sub}
-                  </div>
-                )}
-              </div>
-            ))}
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
         </motion.div>
 

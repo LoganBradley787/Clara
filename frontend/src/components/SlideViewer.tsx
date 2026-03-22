@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -17,6 +17,24 @@ interface SlideViewerProps {
 export default function SlideViewer({ file, pageNumber, width }: SlideViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (width || !containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setMeasuredWidth(entry.contentRect.width);
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [width]);
+
+  const resolvedWidth = width || measuredWidth;
 
   if (!file) {
     return (
@@ -52,7 +70,7 @@ export default function SlideViewer({ file, pageNumber, width }: SlideViewerProp
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--cat-timing)',
+          color: '#A13B3B',
           fontFamily: 'var(--font-body)',
           fontSize: 'var(--text-sm)',
         }}
@@ -64,6 +82,7 @@ export default function SlideViewer({ file, pageNumber, width }: SlideViewerProp
 
   return (
     <div
+      ref={containerRef}
       style={{
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
@@ -82,19 +101,21 @@ export default function SlideViewer({ file, pageNumber, width }: SlideViewerProp
           }}
         />
       )}
-      <Document
-        file={file}
-        onLoadError={() => setError(true)}
-        loading={null}
-      >
-        <Page
-          pageNumber={pageNumber}
-          width={width}
-          onRenderSuccess={() => setLoading(false)}
-          renderTextLayer={false}
-          renderAnnotationLayer={false}
-        />
-      </Document>
+      {resolvedWidth && (
+        <Document
+          file={file}
+          onLoadError={() => setError(true)}
+          loading={null}
+        >
+          <Page
+            pageNumber={pageNumber}
+            width={resolvedWidth}
+            onRenderSuccess={() => setLoading(false)}
+            renderTextLayer={false}
+            renderAnnotationLayer={false}
+          />
+        </Document>
+      )}
     </div>
   );
 }

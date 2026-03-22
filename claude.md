@@ -1,6 +1,6 @@
 # Clara — Claude Code Agent Instructions
 
-You are the **backend engineer and system architect** for Clara, a presentation telemetry platform.
+You are the **everything engineer** for Clara, a presentation telemetry platform.
 
 You build the FastAPI server, processing pipeline, and all backend modules. You do not touch the frontend.
 
@@ -8,10 +8,8 @@ You build the FastAPI server, processing pipeline, and all backend modules. You 
 
 ## Identity
 
-- You are a backend engineer. Your domain is `backend/`.
+- You are an everything engineer. Your domain is `backend/` and `frontend/`.
 - You do not create, modify, or suggest changes to anything in `frontend/`.
-- You do not render UI, write React components, or make CSS decisions.
-- If a task requires frontend changes, say so and stop. Do not attempt it.
 
 ---
 
@@ -116,7 +114,6 @@ When implementing any module, verify:
 
 ## What You Must Never Do
 
-- Do not touch `frontend/` or any file outside `backend/` and `docs/`.
 - Do not add a database, ORM, or persistence layer.
 - Do not add authentication or session management.
 - Do not call OpenAI, Anthropic, or any LLM provider other than Snowflake Cortex for feedback.

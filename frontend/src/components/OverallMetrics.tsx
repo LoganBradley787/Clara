@@ -3,6 +3,7 @@ import type { OverallMetrics as OverallMetricsType } from '../types';
 interface OverallMetricsProps {
   metrics: OverallMetricsType;
   onNewPresentation: () => void;
+  onPracticeAgain?: () => void;
 }
 
 function formatDuration(seconds: number): string {
@@ -16,7 +17,7 @@ function formatDeviation(dev: number): string {
   return `(${sign}${Math.round(dev)}s)`;
 }
 
-export default function OverallMetrics({ metrics, onNewPresentation }: OverallMetricsProps) {
+export default function OverallMetrics({ metrics, onNewPresentation, onPracticeAgain }: OverallMetricsProps) {
   return (
     <div
       className="bg-deep-gradient"
@@ -41,26 +42,50 @@ export default function OverallMetrics({ metrics, onNewPresentation }: OverallMe
         <MetricCell label="Pauses" value={metrics.total_pause_count.toString()} />
       </div>
 
-      <button
-        onClick={onNewPresentation}
-        style={{
-          fontFamily: 'var(--font-body)',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 500,
-          color: 'var(--text-on-dark)',
-          background: 'rgba(250, 246, 241, 0.1)',
-          border: '1px solid rgba(250, 246, 241, 0.2)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-2) var(--space-4)',
-          cursor: 'pointer',
-          transition: 'background 150ms ease',
-          whiteSpace: 'nowrap',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(250, 246, 241, 0.18)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(250, 246, 241, 0.1)')}
-      >
-        New Presentation
-      </button>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        {onPracticeAgain && (
+          <button
+            onClick={onPracticeAgain}
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              color: 'var(--text-on-dark)',
+              background: 'var(--accent)',
+              border: '1px solid rgba(250, 246, 241, 0.2)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-2) var(--space-4)',
+              cursor: 'pointer',
+              transition: 'background 150ms ease',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent)')}
+          >
+            Practice Again
+          </button>
+        )}
+        <button
+          onClick={onNewPresentation}
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            color: 'var(--text-on-dark)',
+            background: 'rgba(250, 246, 241, 0.1)',
+            border: '1px solid rgba(250, 246, 241, 0.2)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-2) var(--space-4)',
+            cursor: 'pointer',
+            transition: 'background 150ms ease',
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(250, 246, 241, 0.18)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(250, 246, 241, 0.1)')}
+        >
+          New Presentation
+        </button>
+      </div>
     </div>
   );
 }

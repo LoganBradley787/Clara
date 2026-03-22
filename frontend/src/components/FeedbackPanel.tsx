@@ -1,16 +1,21 @@
-import type { FeedbackItem, FeedbackCategory } from '../types';
+import type { FeedbackItem, FeedbackType } from '../types';
 
 interface FeedbackPanelProps {
   feedback: FeedbackItem[];
 }
 
-const categoryColors: Record<FeedbackCategory, string> = {
-  pacing: 'var(--cat-pacing)',
-  repetition: 'var(--cat-repetition)',
-  clarity: 'var(--cat-clarity)',
-  diction: 'var(--cat-diction)',
-  structure: 'var(--cat-structure)',
-  timing: 'var(--cat-timing)',
+const typeColors: Record<FeedbackType, string> = {
+  REPETITION: 'var(--cat-repetition)',
+  HEDGE_STACK: 'var(--cat-hedge-stack)',
+  FALSE_START: 'var(--cat-false-start)',
+  SLIDE_READING: 'var(--cat-slide-reading)',
+};
+
+const typeLabels: Record<FeedbackType, string> = {
+  REPETITION: 'repetition',
+  HEDGE_STACK: 'hedge stack',
+  FALSE_START: 'false start',
+  SLIDE_READING: 'slide reading',
 };
 
 export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
@@ -24,49 +29,57 @@ export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {feedback.map((item, i) => {
-        const isSuggestion = item.severity === 'suggestion';
-        return (
-          <div
-            key={i}
+      {feedback.map((item, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 'var(--space-3)',
+            padding: 'var(--space-3)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-base)',
+            borderLeft: `3px solid ${typeColors[item.type]}`,
+          }}
+        >
+          <span
+            className="category-label"
             style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 'var(--space-3)',
-              padding: 'var(--space-3)',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-base)',
-              borderLeft: isSuggestion ? '3px solid var(--accent)' : '3px solid transparent',
+              display: 'inline-block',
+              padding: '2px 8px',
+              borderRadius: '9999px',
+              background: typeColors[item.type],
+              color: '#fff',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.6,
+              flexShrink: 0,
             }}
           >
-            <span
-              className="category-label"
-              style={{
-                display: 'inline-block',
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                background: categoryColors[item.category],
-                color: '#fff',
-                whiteSpace: 'nowrap',
-                lineHeight: 1.6,
-                flexShrink: 0,
-              }}
-            >
-              {item.category}
-            </span>
+            {typeLabels[item.type]}
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <span
               style={{
                 fontSize: 'var(--text-sm)',
                 color: 'var(--text-primary)',
-                fontWeight: isSuggestion ? 600 : 400,
+                fontWeight: 600,
                 lineHeight: 1.5,
               }}
             >
-              {item.comment}
+              {item.text}
+            </span>
+            <span
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}
+            >
+              {item.detail}
             </span>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }

@@ -92,6 +92,7 @@ export default function MetricsPanel({ metrics, duration, onFillerClick, onPause
       <div
         style={{
           ...cellStyle,
+          ...(metrics.pauses.count > 0 ? pauseWarningCellStyle : {}),
           cursor: metrics.pauses.count > 0 ? 'pointer' : 'default',
         }}
         onClick={metrics.pauses.count > 0 ? () => { setPausesExpanded((p) => !p); onPauseClick(); } : undefined}
@@ -99,10 +100,29 @@ export default function MetricsPanel({ metrics, duration, onFillerClick, onPause
         tabIndex={metrics.pauses.count > 0 ? 0 : undefined}
         onKeyDown={metrics.pauses.count > 0 ? (e) => { if (e.key === 'Enter') { setPausesExpanded((p) => !p); onPauseClick(); } } : undefined}
       >
-        <span className="category-label" style={labelStyle}>Pauses</span>
+        <span className="category-label" style={metrics.pauses.count > 0 ? { color: 'var(--pause-warning)' } : labelStyle}>Pauses</span>
         {metrics.pauses.count > 0 ? (
           <div>
-            <span className="metric-value" style={valueStyle}>{metrics.pauses.count}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span className="metric-value" style={{ ...valueStyle, color: 'var(--pause-warning)' }}>{metrics.pauses.count}</span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  background: 'var(--pause-warning)',
+                  color: '#fff',
+                  fontFamily: 'var(--font-body)',
+                  fontWeight: 500,
+                  fontSize: 'var(--text-xs)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  lineHeight: 1.6,
+                }}
+              >
+                {Math.max(...metrics.pauses.instances.map((p) => p.duration_seconds)).toFixed(1)}s longest
+              </span>
+            </div>
             <AnimatePresence>
               {pausesExpanded && (
                 <motion.ul
@@ -125,10 +145,10 @@ export default function MetricsPanel({ metrics, duration, onFillerClick, onPause
                       className="metric-value"
                       style={{
                         fontSize: 'var(--text-xs)',
-                        color: 'var(--text-tertiary)',
+                        color: 'var(--text-secondary)',
                       }}
                     >
-                      {p.start.toFixed(1)}s — {p.duration_seconds.toFixed(1)}s long
+                      {p.duration_seconds.toFixed(1)}s
                     </li>
                   ))}
                 </motion.ul>
@@ -209,4 +229,10 @@ const emptyStyle: React.CSSProperties = {
   fontSize: 'var(--text-sm)',
   color: 'var(--text-tertiary)',
   fontStyle: 'italic',
+};
+
+const pauseWarningCellStyle: React.CSSProperties = {
+  background: 'var(--pause-warning-bg)',
+  border: '1px solid var(--pause-warning-border)',
+  boxShadow: 'inset 3px 0 0 var(--pause-warning)',
 };

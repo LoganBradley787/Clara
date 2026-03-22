@@ -1,21 +1,25 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { getResults, ApiClientError } from '../api/client';
+import { getResults, getAudioUrl, ApiClientError } from '../api/client';
 import { useAppState, useAppActions } from '../context/AppContext';
+import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import SlideViewer from '../components/SlideViewer';
 import OverallMetrics from '../components/OverallMetrics';
+import CoachingSummary from '../components/CoachingSummary';
+import AudioPlayer from '../components/AudioPlayer';
+import PresentationTimeline from '../components/PresentationTimeline';
 import MetricsPanel from '../components/MetricsPanel';
-import FeedbackPanel from '../components/FeedbackPanel';
 import TranscriptPanel from '../components/TranscriptPanel';
 import SlideCarousel from '../components/SlideCarousel';
+import ChatPanel from '../components/ChatPanel';
 import type { PresentationResults } from '../types';
 
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { pdfFile, results: contextResults } = useAppState();
-  const { setResults, resetAll } = useAppActions();
+  const { pdfFile, audioBlob, results: contextResults } = useAppState();
+  const { setResults, resetAll, startPracticeAgain } = useAppActions();
 
   const [results, setLocalResults] = useState<PresentationResults | null>(contextResults);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
@@ -24,6 +28,27 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(!contextResults);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (audioBlob) {
+      const url = URL.createObjectURL(audioBlob);
+      setAudioSrc(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    if (id) {
+      let revoke: (() => void) | null = null;
+      getAudioUrl(id)
+        .then((url) => {
+          setAudioSrc(url);
+          revoke = () => URL.revokeObjectURL(url);
+        })
+        .catch(() => {});
+      return () => revoke?.();
+    }
+  }, [audioBlob, id]);
+
+  const player = useAudioPlayer(audioSrc, results?.total_duration_seconds);
 
   useEffect(() => {
     if (contextResults) {
@@ -65,10 +90,36 @@ export default function ResultsPage() {
     return () => { cancelled = true; };
   }, [id, contextResults, navigate, setResults]);
 
+  // Auto-advance slides during playback
+  const slideTimeBounds = useMemo(() => {
+    if (!results) return [];
+    return Array.from({ length: results.total_slides }, (_, i) => {
+      const s = results.slides[`slide_${i}`];
+      return s ? { start: s.start_time, end: s.end_time } : null;
+    });
+  }, [results]);
+
+  useEffect(() => {
+    if (!player.isPlaying) return;
+    for (let i = slideTimeBounds.length - 1; i >= 0; i--) {
+      const b = slideTimeBounds[i];
+      if (b && player.currentTime >= b.start) {
+        if (i !== selectedSlideIndex) setSelectedSlideIndex(i);
+        break;
+      }
+    }
+  }, [player.currentTime, player.isPlaying, slideTimeBounds, selectedSlideIndex]);
+
   const handleNewPresentation = useCallback(() => {
     resetAll();
     navigate('/setup');
   }, [resetAll, navigate]);
+
+  const handlePracticeAgain = useCallback(() => {
+    if (!id) return;
+    startPracticeAgain(id);
+    navigate('/present');
+  }, [id, startPracticeAgain, navigate]);
 
   const handleFillerClick = useCallback(() => {
     setTranscriptExpanded(true);
@@ -77,9 +128,7 @@ export default function ResultsPage() {
     });
   }, []);
 
-  const handlePauseClick = useCallback(() => {
-    // pause expansion is handled inside MetricsPanel
-  }, []);
+  const handlePauseClick = useCallback(() => {}, []);
 
   const handleSlideSelect = useCallback((index: number) => {
     setSelectedSlideIndex(index);
@@ -203,16 +252,39 @@ export default function ResultsPage() {
         }}
       >
         {/* Zone 1: Overall Metrics */}
-        <motion.div
-          variants={zoneVariants}
-        >
+        <motion.div variants={zoneVariants}>
           <OverallMetrics
             metrics={results.overall_metrics}
             onNewPresentation={handleNewPresentation}
+            onPracticeAgain={handlePracticeAgain}
           />
         </motion.div>
 
-        {/* Zone 2: Two-Column Split */}
+        {/* Audio Player + Timeline */}
+        {audioSrc && (
+          <motion.div variants={zoneVariants} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <AudioPlayer player={player} />
+            <PresentationTimeline
+              results={results}
+              currentTime={player.currentTime}
+              duration={player.duration}
+              onSeek={player.seek}
+              onSlideSelect={handleSlideSelect}
+            />
+          </motion.div>
+        )}
+
+        {/* Zone 2: Coaching Summary */}
+        {results.coaching_summary && results.coaching_summary.length > 0 && (
+          <motion.div variants={zoneVariants} style={cardStyle}>
+            <CoachingSummary
+              tips={results.coaching_summary}
+              onSlideClick={handleSlideSelect}
+            />
+          </motion.div>
+        )}
+
+        {/* Zone 3: Two-Column Split */}
         <motion.div
           variants={zoneVariants}
           className="results-grid"
@@ -227,6 +299,7 @@ export default function ResultsPage() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-start',
+              minWidth: 0,
             }}
           >
             <SlideViewer
@@ -284,25 +357,32 @@ export default function ResultsPage() {
                   )}
                 </section>
 
-                {/* Feedback */}
-                <section style={cardStyle}>
-                  <h3 style={sectionHeadingStyle}>Feedback</h3>
-                  {slide ? (
-                    <FeedbackPanel feedback={slide.feedback} />
-                  ) : (
-                    <p style={emptySlideStyle}>No feedback for this slide.</p>
-                  )}
-                </section>
-
-                {/* Transcript */}
+                {/* Transcript + Inline Feedback */}
                 <section ref={transcriptRef} style={cardStyle}>
-                  <h3 style={sectionHeadingStyle}>Transcript</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+                    <h3 style={{ ...sectionHeadingStyle, marginBottom: 0 }}>Transcript</h3>
+                    {slide && slide.feedback.length > 0 && (
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-body)',
+                          fontSize: 'var(--text-xs)',
+                          color: 'var(--text-tertiary)',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {slide.feedback.length} inline annotation{slide.feedback.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                   {slide ? (
                     <TranscriptPanel
                       transcript={slide.transcript}
                       fillerWords={slide.metrics.filler_words.instances}
+                      feedback={slide.feedback}
                       expanded={transcriptExpanded}
                       onToggle={() => setTranscriptExpanded((p) => !p)}
+                      words={slide.words}
+                      currentTime={player.isPlaying ? player.currentTime : undefined}
                     />
                   ) : (
                     <p style={emptySlideStyle}>No transcript for this slide.</p>
@@ -313,7 +393,7 @@ export default function ResultsPage() {
           </div>
         </motion.div>
 
-        {/* Zone 3: Slide Carousel */}
+        {/* Zone 4: Slide Carousel */}
         <motion.div variants={zoneVariants}>
           <SlideCarousel
             totalSlides={results.total_slides}
@@ -322,13 +402,18 @@ export default function ResultsPage() {
           />
         </motion.div>
       </motion.div>
+
+      {/* Chat Panel */}
+      {results.presentation_id && (
+        <ChatPanel presentationId={results.presentation_id} />
+      )}
     </motion.div>
   );
 }
 
 const zoneVariants = {
   hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 };
 
 const cardStyle: React.CSSProperties = {

@@ -119,7 +119,7 @@ Sent by frontend, used by both Manual Analytics and LLM Module.
 
 ```json
 {
-  "tone": "formal",
+  "tone": "professional",
   "expected_duration_minutes": 10,
   "context": "Class presentation on climate change for university course"
 }
@@ -127,7 +127,7 @@ Sent by frontend, used by both Manual Analytics and LLM Module.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|---------------|-------------|
-| `tone` | string | `"formal"`, `"casual"`, `"informative"`, `"persuasive"` | Affects WPM benchmarks and pause thresholds |
+| `tone` | string | `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"` | Affects WPM benchmarks and pause thresholds |
 | `expected_duration_minutes` | number | 1–120 | Target duration |
 | `context` | string | free text, max 500 chars | Audience and purpose context for LLM |
 
@@ -185,56 +185,64 @@ Output of the Manual Analytics module.
 
 | Tone | Pause Threshold |
 |------|----------------|
-| formal | > 2.0s |
-| casual | > 3.0s |
-| informative | > 2.5s |
+| professional | > 2.0s |
+| conversational | > 3.0s |
+| educational | > 2.5s |
 | persuasive | > 2.0s |
+| storytelling | > 3.5s |
 
 **Speaking pace ranges:**
 
 | Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| formal | < 130 WPM | 130 ≤ WPM ≤ 160 | > 160 WPM |
-| casual | < 140 WPM | 140 ≤ WPM ≤ 180 | > 180 WPM |
-| informative | < 120 WPM | 120 ≤ WPM ≤ 150 | > 150 WPM |
+| professional | < 130 WPM | 130 ≤ WPM ≤ 160 | > 160 WPM |
+| conversational | < 140 WPM | 140 ≤ WPM ≤ 180 | > 180 WPM |
+| educational | < 110 WPM | 110 ≤ WPM ≤ 145 | > 145 WPM |
 | persuasive | < 140 WPM | 140 ≤ WPM ≤ 170 | > 170 WPM |
+| storytelling | < 120 WPM | 120 ≤ WPM ≤ 160 | > 160 WPM |
 
 ---
 
 ## 6. LLM Feedback Output (Per Slide)
 
-Output of the Snowflake Cortex LLM module.
+Output of the Snowflake Cortex LLM module. The LLM catches language-level patterns that regex/counting cannot detect. It does not duplicate deterministic metrics.
 
 ```json
 {
   "slide_0": {
     "feedback": [
       {
-        "category": "pacing",
-        "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for formal presentations.",
-        "severity": "observation"
-      },
-      {
-        "category": "repetition",
-        "comment": "The phrase 'climate change' appears 3 times in 45 seconds. Consider synonyms.",
-        "severity": "suggestion"
+        "type": "REPETITION",
+        "text": "You know",
+        "detail": "Phrase 'You know' appears on slides 2, 5, and 7"
       }
     ]
+  },
+  "slide_1": {
+    "feedback": []
   }
 }
 ```
 
 | Field | Type | Values | Description |
 |-------|------|--------|-------------|
-| `category` | string | `"pacing"`, `"repetition"`, `"clarity"`, `"diction"`, `"structure"`, `"timing"` | Feedback domain |
-| `comment` | string | max 200 chars | Specific, data-grounded observation |
-| `severity` | string | `"observation"`, `"suggestion"` | Neutral vs actionable |
+| `type` | string | `"REPETITION"`, `"HEDGE_STACK"`, `"FALSE_START"`, `"SLIDE_READING"` | Flag type |
+| `text` | string | max 200 chars | The specific words or phrase flagged from the transcript |
+| `detail` | string | max 200 chars | Brief explanation of the issue |
+
+**Flag type definitions:**
+- `REPETITION` — same phrase/structure repeated across multiple slides (not within a single slide)
+- `HEDGE_STACK` — 3+ hedging words in the same sentence
+- `FALSE_START` — speaker begins a sentence, abandons it, restarts
+- `SLIDE_READING` — transcript closely matches PDF slide text verbatim (only when slide text is available)
 
 **Constraints:**
-- Maximum 5 feedback items per slide
-- Each comment must reference specific words, phrases, or metrics from the transcript
-- No generic encouragement or subjective quality ratings
-- Comments must be under 200 characters
+- Maximum 2 feedback items per slide
+- Each flag must reference specific words or phrases from the transcript
+- No metrics commentary (duration, WPM, word count)
+- No encouragement, praise, or subjective quality ratings
+- No grammar/vocabulary critique unless hedge stacking
+- Clean slides return an empty array — feedback is never forced
 
 ---
 
@@ -288,9 +296,9 @@ The complete results object returned by `GET /api/presentations/{id}/results`.
       },
       "feedback": [
         {
-          "category": "pacing",
-          "comment": "Speaking pace of 112 WPM is below typical range for formal presentations.",
-          "severity": "observation"
+          "type": "REPETITION",
+          "text": "climate change",
+          "detail": "Phrase 'climate change' also appears on slides 2 and 4"
         }
       ]
     }
@@ -326,3 +334,50 @@ The aggregator merges data from three sources into each slide object. Two fields
 | `expected_duration_seconds` | float | From expectations, converted to seconds |
 | `actual_duration_seconds` | float | From Whisper duration |
 | `duration_deviation_seconds` | float | `actual - expected` (negative = under time) |
+
+### Coaching Summary
+
+The `coaching_summary` field is a list of 3 prioritized, actionable coaching tips generated by the LLM after all per-slide analysis is complete. It appears at the top level of the results alongside `overall_metrics`.
+
+```json
+{
+  "coaching_summary": [
+    {
+      "title": "Replace filler phrases with deliberate pauses",
+      "explanation": "You used 'kind of' 12 times across slides 2-5. Try pausing silently instead — it projects confidence and gives your audience time to absorb key points.",
+      "slide_references": ["slide_2", "slide_3", "slide_4", "slide_5"]
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `coaching_summary` | array | Exactly 3 coaching tips, ordered by priority |
+| `coaching_summary[].title` | string | Short actionable title, max 100 chars |
+| `coaching_summary[].explanation` | string | Detailed explanation with specific data references, max 300 chars |
+| `coaching_summary[].slide_references` | string[] | Slide IDs most relevant to this tip (e.g. `["slide_2", "slide_5"]`) |
+
+---
+
+## 8. Chat Message Schema
+
+Used by the `POST /api/presentations/{id}/chat` endpoint for conversational follow-up.
+
+### Request
+
+```json
+{
+  "message": "Why do I keep saying 'kind of' so much on slide 3?"
+}
+```
+
+### Response
+
+```json
+{
+  "response": "On slide 3, you used 'kind of' 4 times..."
+}
+```
+
+Chat history is maintained server-side per presentation (in-memory). Each message is sent with full presentation context so the AI coach can reference specific metrics, feedback, and transcript data.

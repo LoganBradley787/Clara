@@ -2,7 +2,7 @@ from app.aggregator import aggregate_results
 from app.models import (
     SlideTranscript, SlideMetrics, SlideFeedback, FeedbackItem,
     WordTimestamp, FillerInfo, PauseInfo, Expectations, Tone,
-    FeedbackCategory, Severity, SpeakingPace,
+    FeedbackType, SpeakingPace,
 )
 
 
@@ -36,7 +36,7 @@ def _make_metrics():
 def _make_feedback():
     return {
         "slide_0": SlideFeedback(feedback=[
-            FeedbackItem(category=FeedbackCategory.pacing, comment="test", severity=Severity.observation)
+            FeedbackItem(type=FeedbackType.repetition, text="hello", detail="test flag")
         ]),
         "slide_1": SlideFeedback(feedback=[]),
     }

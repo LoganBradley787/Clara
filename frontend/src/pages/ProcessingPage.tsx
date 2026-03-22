@@ -9,7 +9,7 @@ import type { PresentationMetadata } from '../types';
 
 export default function ProcessingPage() {
   const navigate = useNavigate();
-  const { audioBlob, slideTimestamps, expectations, totalSlides, presentationId } =
+  const { audioBlob, slideTimestamps, expectations, totalSlides, presentationId, pdfFile, previousAttemptId } =
     useAppState();
   const { setPresentationId, resetAll } = useAppActions();
 
@@ -34,7 +34,7 @@ export default function ProcessingPage() {
       total_slides: totalSlides,
     };
 
-    submitPresentation(audioBlob, metadata)
+    submitPresentation(audioBlob, metadata, pdfFile)
       .then((res) => {
         setPresentationId(res.presentation_id);
       })
@@ -50,9 +50,13 @@ export default function ProcessingPage() {
 
   useEffect(() => {
     if (isComplete && presentationId) {
-      navigate(`/results/${presentationId}`, { replace: true });
+      if (previousAttemptId) {
+        navigate(`/compare/${previousAttemptId}/${presentationId}`, { replace: true });
+      } else {
+        navigate(`/results/${presentationId}`, { replace: true });
+      }
     }
-  }, [isComplete, presentationId, navigate]);
+  }, [isComplete, presentationId, previousAttemptId, navigate]);
 
   const errorText = submitError || (isFailed ? errorMessage : null);
 
@@ -136,7 +140,7 @@ export default function ProcessingPage() {
               style={{
                 fontFamily: 'var(--font-body)',
                 fontSize: 'var(--text-sm)',
-                color: 'var(--cat-timing)',
+                color: '#A13B3B',
                 textAlign: 'center',
                 lineHeight: 1.5,
               }}

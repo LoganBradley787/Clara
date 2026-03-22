@@ -4,6 +4,7 @@ import SetupPage from './pages/SetupPage';
 import RecordingPage from './pages/RecordingPage';
 import ProcessingPage from './pages/ProcessingPage';
 import ResultsPage from './pages/ResultsPage';
+import ComparisonPage from './pages/ComparisonPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -11,4 +12,5 @@ export const router = createBrowserRouter([
   { path: '/present', element: <RecordingPage /> },
   { path: '/processing', element: <ProcessingPage /> },
   { path: '/results/:id', element: <ResultsPage /> },
+  { path: '/compare/:id1/:id2', element: <ComparisonPage /> },
 ]);

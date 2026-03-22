@@ -34,6 +34,7 @@ All error responses follow this structure:
 | POST | `/api/presentations` | Submit a presentation for processing |
 | GET | `/api/presentations/{id}/status` | Poll processing status |
 | GET | `/api/presentations/{id}/results` | Retrieve final results |
+| POST | `/api/presentations/{id}/chat` | Chat with AI coach about results |
 
 ---
 
@@ -49,6 +50,7 @@ Submit a recorded presentation for analysis.
 |-------|------|----------|-------------|
 | `audio` | File (binary) | Yes | Audio recording. Accepted formats: `audio/webm`, `audio/wav`, `audio/mp4` |
 | `metadata` | String (JSON) | Yes | JSON string containing slide timestamps and expectations |
+| `slides` | File (binary) | No | PDF file of the presentation slides. Used for SLIDE_READING detection. If omitted, SLIDE_READING flags are not generated. |
 
 **metadata JSON structure:**
 
@@ -56,7 +58,7 @@ Submit a recorded presentation for analysis.
 {
   "slide_timestamps": [0.0, 45.2, 102.7, 180.0],
   "expectations": {
-    "tone": "formal",
+    "tone": "professional",
     "expected_duration_minutes": 10,
     "context": "Class presentation on climate change for university course"
   },
@@ -69,7 +71,7 @@ Submit a recorded presentation for analysis.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `slide_timestamps` | `number[]` | Yes | Array of timestamps (seconds) when each slide was started. Length must be >= `total_slides` (may exceed it if the user navigated backward then forward). First element should be `0.0` or close to it. |
-| `expectations.tone` | `string` | Yes | One of: `"formal"`, `"casual"`, `"informative"`, `"persuasive"` |
+| `expectations.tone` | `string` | Yes | One of: `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"` |
 | `expectations.expected_duration_minutes` | `number` | Yes | Expected total presentation duration in minutes |
 | `expectations.context` | `string` | Yes | Brief description of presentation purpose and audience |
 | `total_slides` | `number` | Yes | Total number of slides in the presentation |
@@ -256,7 +258,7 @@ Retrieve final processed results.
       "feedback": [
         {
           "category": "pacing",
-          "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for formal presentations. Consider increasing pace slightly on this introductory slide.",
+          "comment": "Speaking pace of 112 WPM is below the 130-160 WPM range typical for professional presentations. Consider increasing pace slightly on this introductory slide.",
           "severity": "observation"
         },
         {
@@ -297,10 +299,11 @@ Expectations are passed in the initial POST and influence both manual analysis (
 
 | Tone | Slow | Normal | Fast | Pause Tolerance |
 |------|------|--------|------|-----------------|
-| `formal` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
-| `casual` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
-| `informative` | < 120 | 120–150 (inclusive) | > 150 | Pauses > 2.5s flagged |
+| `professional` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
+| `conversational` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
+| `educational` | < 110 | 110–145 (inclusive) | > 145 | Pauses > 2.5s flagged |
 | `persuasive` | < 140 | 140–170 (inclusive) | > 170 | Pauses > 2s flagged |
+| `storytelling` | < 120 | 120–160 (inclusive) | > 160 | Pauses > 3.5s flagged |
 
 ### Feedback Item Format
 
@@ -340,6 +343,65 @@ Each feedback item in the `feedback` array:
 {
   "error": "not_ready",
   "message": "Processing is still in progress. Poll the status endpoint.",
+  "status": "processing"
+}
+```
+
+---
+
+## POST /api/presentations/{id}/chat
+
+Send a message to the AI coach for follow-up questions about this presentation's results.
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `string (UUID)` | Presentation ID |
+
+### Request
+
+**Content-Type:** `application/json`
+
+```json
+{
+  "message": "Why do I keep saying 'kind of' so much on slide 3?"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | User's question. Max 1000 characters. |
+
+### Response
+
+**Status:** `200 OK`
+
+```json
+{
+  "response": "On slide 3, you used 'kind of' 4 times within 30 seconds..."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `response` | string | The AI coach's answer. |
+
+### Error Responses
+
+**404 Not Found:**
+```json
+{
+  "error": "not_found",
+  "message": "Presentation not found"
+}
+```
+
+**409 Conflict** — results not ready yet:
+```json
+{
+  "error": "not_ready",
+  "message": "Results must be available before starting a chat.",
   "status": "processing"
 }
 ```

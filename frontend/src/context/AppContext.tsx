@@ -9,6 +9,7 @@ interface AppState {
   totalSlides: number;
   presentationId: string | null;
   results: PresentationResults | null;
+  previousAttemptId: string | null;
 }
 
 type AppAction =
@@ -18,6 +19,7 @@ type AppAction =
   | { type: 'SET_RECORDING_DATA'; payload: { audio: Blob; timestamps: number[]; totalSlides: number } }
   | { type: 'SET_PRESENTATION_ID'; payload: string }
   | { type: 'SET_RESULTS'; payload: PresentationResults }
+  | { type: 'START_PRACTICE_AGAIN'; payload: string }
   | { type: 'RESET_ALL' };
 
 interface AppActions {
@@ -27,6 +29,7 @@ interface AppActions {
   setRecordingData: (audio: Blob, timestamps: number[], totalSlides: number) => void;
   setPresentationId: (id: string) => void;
   setResults: (results: PresentationResults) => void;
+  startPracticeAgain: (previousId: string) => void;
   resetAll: () => void;
 }
 
@@ -38,6 +41,7 @@ const initialState: AppState = {
   totalSlides: 0,
   presentationId: null,
   results: null,
+  previousAttemptId: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -59,6 +63,14 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, presentationId: action.payload };
     case 'SET_RESULTS':
       return { ...state, results: action.payload };
+    case 'START_PRACTICE_AGAIN':
+      return {
+        ...initialState,
+        pdfFile: state.pdfFile,
+        expectations: state.expectations,
+        totalSlides: state.totalSlides,
+        previousAttemptId: action.payload,
+      };
     case 'RESET_ALL':
       return { ...initialState };
     default:
@@ -80,6 +92,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_RECORDING_DATA', payload: { audio, timestamps, totalSlides } }),
     setPresentationId: (id) => dispatch({ type: 'SET_PRESENTATION_ID', payload: id }),
     setResults: (results) => dispatch({ type: 'SET_RESULTS', payload: results }),
+    startPracticeAgain: (previousId) => dispatch({ type: 'START_PRACTICE_AGAIN', payload: previousId }),
     resetAll: () => dispatch({ type: 'RESET_ALL' }),
   };
 
