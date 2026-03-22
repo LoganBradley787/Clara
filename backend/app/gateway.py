@@ -117,7 +117,7 @@ async def _run_pipeline(
 
             # Stage: analyzing (step 4/5) — parallel
             presentations[presentation_id]["stage"] = PipelineStage.analyzing
-            metrics, feedback = await asyncio.gather(
+            metrics, (feedback, observations) = await asyncio.gather(
                 asyncio.to_thread(compute_manual_analytics, indexed, metadata.expectations),
                 generate_llm_feedback(indexed, metadata.expectations, whisper_result["text"], slide_texts),
             )
@@ -131,6 +131,7 @@ async def _run_pipeline(
                 metadata.expectations,
                 total_duration=whisper_result["duration"],
                 presentation_id=presentation_id,
+                observations=observations,
             )
 
             # Generate coaching summary (post-aggregation LLM call)

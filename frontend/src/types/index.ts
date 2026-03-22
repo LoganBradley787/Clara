@@ -87,6 +87,15 @@ export interface FeedbackItem {
   detail: string;
 }
 
+export type ObservationType = 'CONTENT_COVERAGE' | 'TANGENT' | 'DEPTH_IMBALANCE' | 'ABRUPT_TRANSITION';
+
+export interface ObservationItem {
+  type: ObservationType;
+  detail: string;
+  text?: string;
+  evidence?: Record<string, any>;
+}
+
 export interface SlideResult {
   slide_index: number;
   start_time: number;
@@ -96,6 +105,7 @@ export interface SlideResult {
   words: WordTimestamp[];
   metrics: SlideMetrics;
   feedback: FeedbackItem[];
+  observations: ObservationItem[];
 }
 
 export interface OverallMetrics {

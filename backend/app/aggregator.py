@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 from app.models import (
     CoachingTip,
-    SlideTranscript, SlideMetrics, SlideFeedback, Expectations,
+    SlideTranscript, SlideMetrics, SlideFeedback, SlideObservations, Expectations,
     AggregatedSlide, OverallMetrics, PresentationResults,
 )
 
@@ -14,6 +14,7 @@ def aggregate_results(
     total_duration: float,
     presentation_id: str = "",
     coaching_summary: Optional[List[CoachingTip]] = None,
+    observations: Optional[Dict[str, SlideObservations]] = None,
 ) -> PresentationResults:
     slides = {}
     total_word_count = 0
@@ -24,6 +25,7 @@ def aggregate_results(
         t = transcripts[slide_id]
         m = metrics[slide_id]
         f = feedback.get(slide_id, SlideFeedback(feedback=[]))
+        o = (observations or {}).get(slide_id, SlideObservations(observations=[]))
 
         # Build metrics dict WITHOUT duration_seconds (promoted to slide top level)
         metrics_dict = m.model_dump(exclude={"duration_seconds"})
@@ -37,6 +39,7 @@ def aggregate_results(
             words=t.words,
             metrics=metrics_dict,
             feedback=f.feedback,
+            observations=o.observations,
         )
 
         total_word_count += m.word_count

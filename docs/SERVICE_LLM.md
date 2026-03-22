@@ -105,10 +105,33 @@ These are **permanently removed** and must never appear:
 
 - ~~CLARITY~~ — too subjective, LLM invents problems
 - ~~DICTION~~ — style policing nobody asked for
-- ~~STRUCTURE~~ — "abrupt transition" is not measurable
 - ~~TIMING~~ — restates duration stat from metrics
 - ~~PACING~~ — restates WPM stat from metrics
 - Any positive feedback, encouragement, or "good job" comments
+
+---
+
+## Observation Types
+
+Observations are holistic, slide-level assessments returned alongside flags. They cover content coverage, tangents, depth imbalance, and transitions. **Observations are optional** — most slides should have an empty array.
+
+### CONTENT_COVERAGE
+Speaker skipped significant concepts from the slide. **Requires PDF text (10+ words).** The LLM identifies covered and missed *concepts* semantically — synonyms and paraphrasing count as covered (e.g., "rocks" on slide + "gravel" in speech = covered). Returns structured evidence: `{"concepts_covered": [...], "concepts_missed": [...]}`.
+
+### TANGENT
+Speaker went off-topic from the slide content. **Requires PDF text.** The `text` field must contain an exact transcript quote of the tangent passage. Rendered as an inline annotation.
+
+### DEPTH_IMBALANCE
+Slide received disproportionate time relative to content density. **Requires PDF text (30+ words)** — title slides, image-heavy slides, and section dividers are excluded. **Entirely deterministic — no LLM call.** Computed from `slide_duration / total_duration` vs `slide_pdf_words / total_pdf_words`. Fires when ratio diverges > 2.5x. Evidence: `{"content_pct": float, "time_pct": float}`.
+
+### ABRUPT_TRANSITION
+No bridge or connection from the previous slide. **Does not require PDF.** Cannot appear on slide_0. The `text` field must contain an exact quote of the opening sentence. Rendered as an inline annotation.
+
+**Constraints:**
+- Maximum 2 observations per slide
+- Empty array is the norm — observations are never forced
+- No encouragement, praise, or subjective quality ratings
+- TANGENT and ABRUPT_TRANSITION require `text` (exact transcript quote); CONTENT_COVERAGE and DEPTH_IMBALANCE do not
 
 ---
 
@@ -124,11 +147,24 @@ The LLM is unreliable when asked to discover patterns from raw text alone. To en
 
 3. **Transcript-to-Slide Similarity**: A word-overlap coefficient is computed between the spoken transcript and PDF slide text. SLIDE_READING is only enabled when similarity ≥ 0.5.
 
+4. **Depth Ratios** (for DEPTH_IMBALANCE observations): Compare `slide_duration / total_duration` vs `slide_pdf_words / total_pdf_words` for each slide. Only consider slides with 30+ words of PDF text. Flag when ratio diverges > 2.5x. This is entirely deterministic — no LLM involved.
+
+5. **Transition Context** (for ABRUPT_TRANSITION observations): Extract the last sentence of the previous slide's transcript and the first sentence of the current slide's transcript. Provide both to the LLM as evidence.
+
+6. **Tangent Context** (for TANGENT observations): Compute word-overlap score between each slide's transcript and its PDF text. Low overlap with PDF text suggests the speaker may have gone off-topic. Provide overlap score to LLM.
+
 ### Post-Validation Phase (runs after each LLM response)
 
+**Flags:**
 1. **Quote Verification**: The `text` field must appear verbatim in the slide's transcript. Flags with fabricated quotes are silently dropped.
 2. **REPETITION Verification**: The flagged phrase must match a pre-computed cross-slide n-gram. Hallucinated repetitions are dropped.
 3. **SLIDE_READING Verification**: The similarity score must be ≥ 0.5 and slide text must be present. Otherwise the flag is dropped.
+
+**Observations:**
+4. **CONTENT_COVERAGE Verification**: Drop if no PDF text, slide has < 10 words of PDF text, or `concepts_missed` is empty.
+5. **TANGENT Verification**: Drop if no PDF text, or `text` quote not found in transcript.
+6. **DEPTH_IMBALANCE Verification**: Drop if slide has < 30 words of PDF text, or ratio within 0.4x–2.5x.
+7. **ABRUPT_TRANSITION Verification**: Drop if slide_0, or `text` quote not found in transcript, or either side has empty transcript.
 
 ### System Prompt
 
@@ -158,14 +194,14 @@ If no slide text is provided, NEVER flag SLIDE_READING. If the similarity score 
 below 0.5, do NOT flag SLIDE_READING.
 
 ## RULES:
-- If no patterns are found, return an EMPTY array []. Never force feedback.
-- Return at most 2 flags per slide.
+- Return at most 2 flags and at most 2 observations per slide.
+- Empty arrays are expected for most slides. Never force output.
 - The "text" field MUST contain an exact quote from the slide's transcript.
 - Do NOT flag speaking pace, word count, duration, filler words, or pauses.
 - Do NOT provide encouragement, praise, or suggestions.
 - Do NOT flag grammar, vocabulary, or style choices.
 - ONLY flag patterns with clear, specific evidence from the transcript.
-- Respond ONLY with a valid JSON array. No markdown fences, no explanation.
+- Respond ONLY with a valid JSON object. No markdown fences, no explanation.
 ```
 
 ### User Prompt Template
@@ -183,19 +219,32 @@ FULL PRESENTATION TRANSCRIPT (with slide boundaries):
 ANALYZING SLIDE {slide_number} OF {total_slides}:
 Transcript: "{slide_transcript}"
 {evidence_section}
-Based ONLY on the evidence above, return a JSON array of flags for Slide {slide_number}.
+Based ONLY on the evidence above, return a JSON object with two arrays for Slide {slide_number}.
 
-Each flag must have:
+{
+  "flags": [...],
+  "observations": [...]
+}
+
+FLAGS (language-level patterns):
 - "type": one of REPETITION, HEDGE_STACK, FALSE_START, SLIDE_READING
-- "text": exact quote from THIS slide's transcript (Slide {slide_number})
+- "text": exact quote from THIS slide's transcript
 - "detail": explanation under 200 characters
 
-If nothing qualifies, return: []
+OBSERVATIONS (holistic slide-level):
+- "type": one of CONTENT_COVERAGE, TANGENT, ABRUPT_TRANSITION
+- "detail": explanation under 250 characters
+- "text": exact quote (required for TANGENT and ABRUPT_TRANSITION, omit for CONTENT_COVERAGE)
+- "evidence": for CONTENT_COVERAGE only: {"concepts_covered": [...], "concepts_missed": [...]}
+
+If nothing qualifies, return: {"flags": [], "observations": []}
 ```
 
 The `{evidence_section}` is dynamically built and includes:
 - **Pre-computed cross-slide repetitions** relevant to this slide, or an explicit "None detected" message
 - **Slide text + similarity score** (if PDF text available), or an explicit "Not available" message
+- **Transition context** (last sentence of previous slide + first sentence of current slide), if applicable
+- **Tangent context** (transcript-to-slide overlap score), if PDF text available
 
 **Note:** `slide_duration` and `slide_word_count` are intentionally excluded from the prompt to prevent the LLM from commenting on metrics.
 
@@ -258,36 +307,20 @@ Each feedback item:
 
 ## Structured Response Schema
 
-The LLM must return a JSON array. Parse and validate:
+The LLM must return a JSON **object** with two arrays: `flags` and `observations`.
 
-```python
-VALID_TYPES = {"REPETITION", "HEDGE_STACK", "FALSE_START", "SLIDE_READING"}
-
-def parse_llm_response(raw_response: str) -> List[FeedbackItem]:
-    # Strip any markdown code fences if present
-    cleaned = raw_response.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
-
-    items = json.loads(cleaned)
-
-    validated = []
-    for item in items[:2]:  # Max 2
-        if item.get("type") not in VALID_TYPES:
-            continue
-        text = item.get("text", "")
-        detail = item.get("detail", "")
-        if len(text) > 200:
-            text = text[:197] + "..."
-        if len(detail) > 200:
-            detail = detail[:197] + "..."
-        # Filter banned phrases
-        if not filter_generic(detail):
-            continue
-        validated.append(item)
-
-    return validated
+```json
+{
+  "flags": [
+    {"type": "HEDGE_STACK", "text": "...", "detail": "..."}
+  ],
+  "observations": [
+    {"type": "CONTENT_COVERAGE", "detail": "...", "evidence": {"concepts_covered": [...], "concepts_missed": [...]}}
+  ]
+}
 ```
+
+Parse and validate each array independently. See `_parse_and_validate()` in `app/llm_feedback.py` for the full implementation.
 
 ---
 

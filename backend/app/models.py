@@ -22,6 +22,12 @@ class FeedbackType(str, Enum):
     false_start = "FALSE_START"
     slide_reading = "SLIDE_READING"
 
+class ObservationType(str, Enum):
+    content_coverage = "CONTENT_COVERAGE"
+    tangent = "TANGENT"
+    depth_imbalance = "DEPTH_IMBALANCE"
+    abrupt_transition = "ABRUPT_TRANSITION"
+
 class ProcessingStatus(str, Enum):
     processing = "processing"
     completed = "completed"
@@ -101,6 +107,15 @@ class FeedbackItem(BaseModel):
     text: str = Field(max_length=200)
     detail: str = Field(max_length=200)
 
+class ObservationItem(BaseModel):
+    type: ObservationType
+    detail: str = Field(max_length=250)
+    text: Optional[str] = Field(default=None, max_length=200)
+    evidence: Optional[Dict[str, object]] = None
+
+class SlideObservations(BaseModel):
+    observations: List[ObservationItem]
+
 class SlideFeedback(BaseModel):
     feedback: List[FeedbackItem]
 
@@ -115,6 +130,7 @@ class AggregatedSlide(BaseModel):
     words: List[WordTimestamp]
     metrics: Dict[str, object]  # SlideMetrics fields minus duration_seconds
     feedback: List[FeedbackItem]
+    observations: List[ObservationItem]
 
 class OverallMetrics(BaseModel):
     total_word_count: int

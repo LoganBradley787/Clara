@@ -13,7 +13,7 @@ def _make_slide(words_data, start=0.0, end=10.0, index=0):
 
 
 def _formal_expectations():
-    return Expectations(tone=Tone.formal, expected_duration_minutes=10, context="test")
+    return Expectations(tone=Tone.professional, expected_duration_minutes=10, context="test")
 
 
 def test_word_count():
@@ -51,23 +51,25 @@ def test_wpm_rounded_to_one_decimal():
 
 
 def test_speaking_pace_formal_slow():
-    # WPM < 130 for formal = slow
-    words = [(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(100)]
-    slide = _make_slide(words, start=0.0, end=60.0)  # 100 WPM
+    # WPM < 90 for professional = slow
+    words = [(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(70)]
+    slide = _make_slide(words, start=0.0, end=60.0)  # 70 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
     assert result["slide_0"].speaking_pace == "slow"
 
 
 def test_speaking_pace_formal_normal():
-    words = [(f"w{i}", i * 0.4, i * 0.4 + 0.2) for i in range(150)]
-    slide = _make_slide(words, start=0.0, end=60.0)  # 150 WPM
+    # 100 WPM is in professional normal range (90-130)
+    words = [(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(100)]
+    slide = _make_slide(words, start=0.0, end=60.0)  # 100 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
     assert result["slide_0"].speaking_pace == "normal"
 
 
 def test_speaking_pace_formal_fast():
-    words = [(f"w{i}", i * 0.3, i * 0.3 + 0.2) for i in range(180)]
-    slide = _make_slide(words, start=0.0, end=60.0)  # 180 WPM
+    # WPM > 130 for professional = fast
+    words = [(f"w{i}", i * 0.3, i * 0.3 + 0.2) for i in range(150)]
+    slide = _make_slide(words, start=0.0, end=60.0)  # 150 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
     assert result["slide_0"].speaking_pace == "fast"
 
@@ -144,7 +146,7 @@ def test_pause_casual_higher_threshold():
     slide = _make_slide([
         ("hello", 0.0, 0.5), ("world", 3.0, 3.5)  # gap = 2.5s
     ])
-    casual = Expectations(tone=Tone.casual, expected_duration_minutes=10, context="test")
+    casual = Expectations(tone=Tone.conversational, expected_duration_minutes=10, context="test")
     result = compute_manual_analytics({"slide_0": slide}, casual)
     assert result["slide_0"].pauses.count == 0
 

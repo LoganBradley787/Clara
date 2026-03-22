@@ -26,6 +26,12 @@
   --cat-false-start: #A13B3B;
   --cat-slide-reading: #2B5F8A;
 
+  /* Semantic — observation tags */
+  --cat-content-coverage: #4A7C59;
+  --cat-tangent: #B5862A;
+  --cat-depth-imbalance: #7A5B8A;
+  --cat-abrupt-transition: #8A3B5E;
+
   /* Semantic — pace badges */
   --pace-slow: #B5862A;
   --pace-normal: #3A7D5E;

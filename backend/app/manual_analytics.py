@@ -25,12 +25,13 @@ from app.models import (
 )
 
 # Tone-based WPM ranges: (low_inclusive, high_inclusive)
+# Calibrated for live presentations (typically 90–130 WPM), not reading aloud
 PACE_RANGES: Dict[str, tuple] = {
-    "professional": (130, 160),
-    "conversational": (140, 180),
-    "educational": (110, 145),
-    "persuasive": (140, 170),
-    "storytelling": (120, 160),
+    "professional": (90, 130),
+    "conversational": (100, 140),
+    "educational": (80, 110),
+    "persuasive": (100, 140),
+    "storytelling": (85, 120),
 }
 
 # Tone-based pause thresholds in seconds

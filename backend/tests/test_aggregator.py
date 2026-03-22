@@ -43,7 +43,7 @@ def _make_feedback():
 
 
 def _make_expectations():
-    return Expectations(tone=Tone.formal, expected_duration_minutes=1, context="test")
+    return Expectations(tone=Tone.professional, expected_duration_minutes=1, context="test")
 
 
 def test_text_renamed_to_transcript():
