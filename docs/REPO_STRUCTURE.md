@@ -15,47 +15,61 @@ clara/
 │   ├── DATA_SCHEMAS.md        # All data structures and JSON schemas
 │   ├── PIPELINE.md            # Step-by-step processing flow
 │   ├── FRONTEND_SPEC.md       # Frontend implementation guide
+│   ├── FRONTEND_PLAN.md       # Frontend implementation plan / notes
 │   ├── SERVICE_MANUAL.md      # Manual analytics module spec
-│   ├── SERVICE_LLM.md         # Snowflake LLM module spec
-│   └── REPO_STRUCTURE.md      # This file
+│   ├── SERVICE_LLM.md         # LLM feedback module spec (OpenAI)
+│   ├── TODO.md                # Working TODO list
+│   ├── REPO_STRUCTURE.md      # This file
+│   └── superpowers/           # Skill prompts (developer-only, not part of runtime)
 │
 ├── frontend/
 │   ├── package.json
+│   ├── package-lock.json
 │   ├── tsconfig.json
+│   ├── tsconfig.app.json
+│   ├── tsconfig.node.json
 │   ├── vite.config.ts
+│   ├── eslint.config.js
 │   ├── index.html
+│   ├── README.md
 │   ├── public/
 │   └── src/
 │       ├── main.tsx
 │       ├── App.tsx
-│       ├── router.tsx           # React Router configuration
+│       ├── router.tsx              # React Router configuration
 │       ├── context/
-│       │   └── AppContext.tsx    # Shared state (PDF, expectations, results)
+│       │   └── AppContext.tsx      # Shared state (PDF, expectations, results)
 │       ├── pages/
 │       │   ├── LandingPage.tsx
 │       │   ├── SetupPage.tsx
 │       │   ├── RecordingPage.tsx
 │       │   ├── ProcessingPage.tsx
-│       │   └── ResultsPage.tsx
+│       │   ├── ResultsPage.tsx
+│       │   └── ComparisonPage.tsx  # Side-by-side comparison of two runs
 │       ├── components/
-│       │   ├── SlideViewer.tsx       # react-pdf slide display
-│       │   ├── AudioRecorder.tsx     # MediaRecorder wrapper
-│       │   ├── SlideCarousel.tsx     # Results slide navigation
-│       │   ├── MetricsPanel.tsx      # Per-slide metrics display
-│       │   ├── FeedbackPanel.tsx     # Per-slide feedback display
-│       │   ├── TranscriptPanel.tsx   # Collapsible transcript view
-│       │   ├── OverallMetrics.tsx    # Top-bar summary metrics
-│       │   ├── ProcessingSteps.tsx   # Pipeline progress display
-│       │   └── ExpectationsForm.tsx  # Tone/duration/context form
+│       │   ├── SlideViewer.tsx          # react-pdf slide display
+│       │   ├── SlideCarousel.tsx        # Results slide navigation
+│       │   ├── AudioPlayer.tsx          # Playback of recorded audio
+│       │   ├── PresentationTimeline.tsx # Audio-synced slide timeline
+│       │   ├── MetricsPanel.tsx         # Per-slide metrics display
+│       │   ├── FeedbackPanel.tsx        # Per-slide feedback display
+│       │   ├── TranscriptPanel.tsx      # Collapsible transcript view
+│       │   ├── OverallMetrics.tsx       # Top-bar summary metrics
+│       │   ├── CoachingSummary.tsx      # High-level coaching takeaways
+│       │   ├── CoverageChecklist.tsx    # Content coverage vs. expectations
+│       │   ├── ChatPanel.tsx            # Follow-up Q&A about the presentation
+│       │   ├── ProcessingSteps.tsx      # Pipeline progress display
+│       │   └── ExpectationsForm.tsx     # Tone/duration/context form
 │       ├── hooks/
-│       │   ├── useAudioRecorder.ts   # MediaRecorder hook
-│       │   └── usePolling.ts         # Status polling hook
+│       │   ├── useAudioRecorder.ts      # MediaRecorder hook
+│       │   ├── useAudioPlayer.ts        # Playback control hook
+│       │   └── usePolling.ts            # Status polling hook
 │       ├── api/
-│       │   └── client.ts            # API call functions
+│       │   └── client.ts                # API call functions
 │       ├── types/
-│       │   └── index.ts             # TypeScript interfaces matching API schemas
+│       │   └── index.ts                 # TypeScript interfaces matching API schemas
 │       └── styles/
-│           └── ...                   # CSS Modules or Tailwind config
+│           └── index.css                # Global stylesheet (Tailwind v4 entry)
 │
 ├── backend/
 │   ├── requirements.txt
@@ -67,7 +81,7 @@ clara/
 │   │   ├── transcriber.py       # OpenAI Whisper API client
 │   │   ├── indexer.py           # Slide-timestamp word mapping
 │   │   ├── manual_analytics.py  # Objective metrics computation
-│   │   ├── llm_feedback.py      # Snowflake Cortex client
+│   │   ├── llm_feedback.py      # OpenAI LLM feedback client
 │   │   ├── aggregator.py        # Merges metrics + feedback
 │   │   ├── models.py            # Pydantic models for all schemas
 │   │   └── config.py            # Environment variable loading
@@ -77,7 +91,7 @@ clara/
 │       ├── test_manual_analytics.py
 │       └── test_aggregator.py
 │
-├── claude.md                    # Instructions for Claude Code agent
+├── CLAUDE.md                    # Instructions for Claude Code agent
 ├── .gitignore
 └── README.md
 ```
@@ -90,23 +104,38 @@ clara/
 
 **Key files:**
 - `src/pages/` — one file per route, matches FRONTEND_SPEC.md page structure
-- `src/components/` — reusable UI components
+- `src/components/` — reusable UI components (slide viewer, audio player, timeline, panels, chat, coaching summary, coverage checklist)
 - `src/api/client.ts` — all API calls centralized here, must match API_SPEC.md exactly
 - `src/types/index.ts` — TypeScript interfaces matching DATA_SCHEMAS.md
+- `src/styles/index.css` — global stylesheet and Tailwind v4 entry point
 
-**Dependencies:**
+**Root configs:** `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `eslint.config.js`, `index.html`.
+
+**Dependencies (`package.json`):**
 ```json
 {
   "dependencies": {
-    "react": "^18",
-    "react-dom": "^18",
-    "react-router-dom": "^6",
-    "react-pdf": "^7"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "react-pdf": "^10.4.1",
+    "motion": "^12.38.0"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "vite": "^5",
-    "@types/react": "^18"
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "tailwindcss": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/node": "^24.12.0",
+    "eslint": "^9.39.4",
+    "@eslint/js": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "typescript-eslint": "^8.57.0",
+    "globals": "^17.4.0"
   }
 }
 ```
@@ -121,7 +150,8 @@ clara/
 - `app/main.py` — FastAPI app initialization, CORS middleware, route inclusion
 - `app/gateway.py` — API routes and pipeline orchestration
 - `app/models.py` — Pydantic models for all request/response schemas (derived from DATA_SCHEMAS.md)
-- `app/config.py` — loads env vars for OpenAI and Snowflake
+- `app/config.py` — loads env vars for OpenAI (Whisper transcription + LLM feedback)
+- `app/llm_feedback.py` — OpenAI client used for per-slide and overall feedback generation
 
 **Dependencies (`requirements.txt`):**
 ```
@@ -129,22 +159,22 @@ fastapi>=0.104
 uvicorn>=0.24
 python-multipart>=0.0.6
 openai>=1.0
-snowflake-connector-python>=3.0
+PyMuPDF>=1.23
 requests>=2.31
 pydantic>=2.0
 python-dotenv>=1.0
+pytest>=7.0
+pytest-asyncio>=0.21
+httpx>=0.25
 ```
 
 **Environment variables (`.env.example`):**
 ```
 OPENAI_API_KEY=sk-...
-SNOWFLAKE_ACCOUNT=...
-SNOWFLAKE_USER=...
-SNOWFLAKE_PASSWORD=...
-SNOWFLAKE_ROLE=...
-SNOWFLAKE_WAREHOUSE=...
-CORTEX_MODEL=mistral-large2
+OPENAI_MODEL=gpt-5.4-mini
 ```
+
+`OPENAI_API_KEY` is used for both Whisper transcription and LLM feedback. `OPENAI_MODEL` selects the chat model used by `llm_feedback.py` (default: `gpt-5.4-mini`).
 
 ---
 
@@ -162,9 +192,13 @@ The single source of truth for all design decisions, contracts, and specificatio
 | DATA_SCHEMAS.md | Read for TypeScript types | **Critical** — implement Pydantic models |
 | PIPELINE.md | Read for understanding | **Critical** — implement pipeline |
 | FRONTEND_SPEC.md | **Critical** — implement UI | Skip |
+| FRONTEND_PLAN.md | Read for context | Skip |
 | SERVICE_MANUAL.md | Skip | **Critical** — implement module |
 | SERVICE_LLM.md | Skip | **Critical** — implement module |
+| TODO.md | Read for shared backlog | Read for shared backlog |
 | REPO_STRUCTURE.md | Read for file layout | Read for file layout |
+
+The `docs/superpowers/` subdirectory holds developer-only skill prompts and is not part of the runtime contracts.
 
 ---
 
@@ -194,14 +228,14 @@ Rules:
 
 ## CLAUDE.md Usage
 
-The `claude.md` file in the repo root should contain:
+The `CLAUDE.md` file in the repo root should contain:
 
 ```
 You are building the backend for Clara, a presentation telemetry platform.
 
 Key references:
 - docs/SERVICE_MANUAL.md — manual analytics module spec
-- docs/SERVICE_LLM.md — Snowflake LLM module spec
+- docs/SERVICE_LLM.md — LLM feedback module spec (OpenAI)
 - docs/API_SPEC.md — all API contracts (do not deviate)
 - docs/DATA_SCHEMAS.md — data structures for Pydantic models
 - docs/PIPELINE.md — processing pipeline implementation guide
@@ -211,7 +245,7 @@ Rules:
 - Pydantic models must match DATA_SCHEMAS.md exactly
 - API endpoints must match API_SPEC.md exactly
 - Use OpenAI Whisper API for transcription (not local whisper)
-- Use Snowflake Cortex REST API for LLM feedback
+- Use OpenAI chat models for LLM feedback (configured via OPENAI_MODEL)
 - All state is in-memory (dict), no database
 - No authentication
 - CORS must allow frontend origin (http://localhost:5173)
@@ -234,7 +268,7 @@ Rules:
 
 1. Read `PIPELINE.md` first — this defines the processing flow
 2. Read `SERVICE_MANUAL.md` — implement the manual analytics module
-3. Read `SERVICE_LLM.md` — implement the Snowflake LLM module
+3. Read `SERVICE_LLM.md` — implement the LLM feedback module
 4. Read `API_SPEC.md` — implement endpoints exactly as specified
 5. Read `DATA_SCHEMAS.md` — create Pydantic models from these schemas
 6. Follow `REPO_STRUCTURE.md` for file placement

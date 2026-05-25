@@ -51,7 +51,7 @@ def test_wpm_rounded_to_one_decimal():
 
 
 def test_speaking_pace_formal_slow():
-    # WPM < 90 for professional = slow
+    # WPM < 100 for professional = slow
     words = [(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(70)]
     slide = _make_slide(words, start=0.0, end=60.0)  # 70 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
@@ -59,7 +59,7 @@ def test_speaking_pace_formal_slow():
 
 
 def test_speaking_pace_formal_normal():
-    # 100 WPM is in professional normal range (90-130)
+    # 100 WPM is at the bottom of professional normal range (100-135)
     words = [(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(100)]
     slide = _make_slide(words, start=0.0, end=60.0)  # 100 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())
@@ -67,7 +67,7 @@ def test_speaking_pace_formal_normal():
 
 
 def test_speaking_pace_formal_fast():
-    # WPM > 130 for professional = fast
+    # WPM > 135 for professional = fast
     words = [(f"w{i}", i * 0.3, i * 0.3 + 0.2) for i in range(150)]
     slide = _make_slide(words, start=0.0, end=60.0)  # 150 WPM
     result = compute_manual_analytics({"slide_0": slide}, _formal_expectations())

@@ -11,12 +11,14 @@ Step 1: Frontend Recording          (client-side)
 Step 2: Upload Submission           (client → server)
 Step 3: Whisper Transcription       (server — backend stage 2/5: "transcribing")
 Step 4: Slide Indexing              (server — backend stage 3/5: "indexing")
+   └─ Substep 4b: PDF Text Extraction (optional, when slides PDF was uploaded)
 Step 5: Parallel Analysis           (server — backend stage 4/5: "analyzing")
 Step 6: Aggregation                 (server — backend stage 5/5: "aggregating")
+   └─ Substep 6b: Coaching Summary Generation (post-aggregation LLM call)
 Step 7: Results Available           (server → client)
 ```
 
-> **Note:** This document describes the full 7-step end-to-end pipeline. The status API (`GET /api/presentations/{id}/status`) reports **5 backend stages** only (received → transcribing → indexing → analyzing → aggregating). Steps 1–2 happen client-side before the backend begins, and step 7 is the terminal state.
+> **Note:** This document describes the full end-to-end pipeline. The status API (`GET /api/presentations/{id}/status`) reports **5 backend stages** only (received → transcribing → indexing → analyzing → aggregating). Steps 1–2 happen client-side before the backend begins, and step 7 is the terminal state. The stage names and numbers map directly to `gateway.STAGE_STEPS` and `models.PipelineStage`. Substeps 4b and 6b are not surfaced as their own status stages — they run inside the surrounding stage.
 
 ---
 
@@ -145,6 +147,27 @@ for each slide_index from 0 to total_slides - 1:
 
 ---
 
+## Step 4b: PDF Text Extraction (optional)
+
+**Stage:** still `indexing` (not a separate status stage)
+
+This substep runs only when the client uploaded a slides PDF alongside the audio (the `slides` multipart field on `POST /api/presentations`). If no PDF was supplied, the substep is skipped and `slide_texts` defaults to an empty dict.
+
+**Input:**
+- PDF bytes from the optional `slides` upload
+- `total_slides` from metadata
+
+**Implementation:** `gateway._extract_slide_texts(pdf_bytes, total_slides)`. Uses PyMuPDF (`fitz`) to open the PDF in-memory and pull `.get_text()` from each page, keyed by `slide_{i}`. Capped at `min(total_slides, len(doc))` pages so a mismatched PDF cannot index past the recorded slide range. The call is offloaded to a worker thread via `asyncio.to_thread` to avoid blocking the event loop.
+
+**Output:** `slide_texts: Dict[str, str]` — e.g. `{"slide_0": "Project goals...", "slide_1": "Timeline..."}`. This dict is threaded into `generate_llm_feedback` to ground the `SLIDE_READING` flag and the `CONTENT_COVERAGE` observation. When the dict is empty, both of those LLM outputs are suppressed by the validation layer.
+
+**Edge cases:**
+- No PDF uploaded → empty dict, LLM never flags `SLIDE_READING` and never observes `CONTENT_COVERAGE`.
+- PDF has fewer pages than `total_slides` → only the available pages are extracted; the missing slide IDs are absent from the dict and treated as if no slide text exists.
+- PDF parse errors propagate out of the substep and fail the pipeline run (caught by the outer `_run_pipeline` exception handler).
+
+---
+
 ## Step 5: Parallel Analysis
 
 **Stage:** `analyzing` (step 4/5)
@@ -186,26 +209,53 @@ Two independent analysis paths run **concurrently** on the slide-indexed transcr
 
 **Output:** `Dict[str, SlideMetrics]` — see DATA_SCHEMAS.md §5
 
-### 5b: Snowflake LLM Feedback
+### 5b: OpenAI LLM Feedback
 
-**Input:** Slide-indexed transcript + expectations + full presentation text
+**Input:** Slide-indexed transcript + expectations + full presentation text + `slide_texts` from substep 4b
 
-**Per-slide processing (run N times, once per slide, sequentially by default; see SERVICE_LLM.md for optional parallelization):**
+**Execution model:** `generate_llm_feedback` iterates the slide dict and calls the OpenAI Chat Completions API **once per slide, sequentially**. There is no parallelization toggle — the loop is the only mode. The blocking OpenAI SDK call is offloaded per-slide via `asyncio.to_thread`, but slides are not fanned out.
 
-1. Construct prompt with:
-   - Full presentation transcript (for cross-slide context)
+**Pre-computation (runs once before the per-slide loop):**
+- Build an annotated transcript with `[Slide N]` markers so the LLM can see slide boundaries.
+- Compute cross-slide repeated n-grams (length 3–6) appearing on 2+ distinct slides. This is the only evidence the LLM may use to justify a `REPETITION` flag.
+- Compute a word-overlap similarity score between each slide's spoken transcript and its PDF text (when available).
+
+**Per-slide processing:**
+
+1. Build an evidence block containing the pre-computed repetitions relevant to this slide and the PDF slide text + similarity score (when available).
+
+2. Construct prompt with:
+   - Full annotated transcript (cross-slide context)
    - Current slide transcript (focus)
-   - Presentation expectations (tone, context, duration)
-   - Specific instructions for categories: repetition, clarity, diction, pacing, structure, timing
-   - Output format instructions (JSON array of feedback items)
+   - Expectations (tone, context)
+   - The evidence block from step 1
+   - Output format instructions (single JSON object with `flags` and `observations` arrays)
 
-2. Call Snowflake Cortex REST API
+3. Call OpenAI Chat Completions with `response_format={"type": "json_object"}` and the configured model (default `gpt-5.4-mini`, set via `OPENAI_MODEL`).
 
-3. Parse response into structured feedback items
+4. Parse the JSON object response and apply strict post-validation (see below).
 
-4. Validate: max 5 items, each under 200 chars, each has valid category and severity
+**Allowed flag types (exactly four):**
+- `REPETITION` — phrase repeated across multiple slides; only valid when the quoted text appears in the pre-computed cross-slide n-gram set for this slide.
+- `HEDGE_STACK` — three or more hedging words clustered in the same sentence.
+- `FALSE_START` — speaker abandons a sentence mid-thought and restarts.
+- `SLIDE_READING` — speaker reads PDF slide text nearly verbatim; only valid when PDF slide text is present AND similarity score >= 0.5.
 
-**Output:** `Dict[str, SlideFeedback]` — see DATA_SCHEMAS.md §6
+**Allowed observation types (exactly one):**
+- `CONTENT_COVERAGE` — speaker skipped significant concepts from the slide. Only valid when PDF slide text is present and contains >= 10 words. The `evidence` payload must include non-empty `concepts_missed` and (optionally) `concepts_covered` string arrays.
+
+There are no `pacing`, `clarity`, `diction`, `structure`, or `timing` categories, and there is no `severity` field — those concerns are handled entirely by manual analytics (5a).
+
+**Per-slide validation limits:**
+- At most **2 flags** per slide (`items[:2]`).
+- At most **1 observation** per slide (`items[:1]`).
+- Each `text` field must be an exact (normalized) substring of the slide's transcript; mismatched quotes are dropped.
+- Each `detail` is capped at 200 chars for flags / 250 chars for observations.
+- Outputs containing banned encouragement phrases (e.g. "great job", "well done") are dropped.
+- On a `json.JSONDecodeError`/`KeyError`/`TypeError`, the call is retried **once** for that slide. A second failure yields empty `flags` and `observations` for that slide (graceful degradation).
+- Slides with no spoken words skip the LLM call entirely and yield empty `flags` and `observations`.
+
+**Output:** A **tuple** `(Dict[str, SlideFeedback], Dict[str, SlideObservations])` — see DATA_SCHEMAS.md §6. The aggregator consumes both halves.
 
 ---
 
@@ -213,23 +263,26 @@ Two independent analysis paths run **concurrently** on the slide-indexed transcr
 
 **Stage:** `aggregating` (step 5/5)
 
-**Input:**
-- Manual analytics output: `Dict[str, SlideMetrics]`
-- LLM feedback output: `Dict[str, SlideFeedback]`
-- Slide-indexed transcript
-- Presentation expectations
-- Whisper metadata (duration)
+**Input (full `aggregate_results` signature):**
+- `transcripts`: slide-indexed transcript (`Dict[str, SlideTranscript]`)
+- `metrics`: manual analytics output (`Dict[str, SlideMetrics]`)
+- `feedback`: LLM flags output (`Dict[str, SlideFeedback]`)
+- `expectations`: presentation expectations
+- `total_duration`: Whisper-reported duration
+- `presentation_id`: the server-issued UUID for this run (echoed into the result body)
+- `observations`: LLM observations output (`Dict[str, SlideObservations]`), the second half of the `generate_llm_feedback` tuple
 
 **Actions:**
 
 1. For each slide ID, merge:
    - Transcript data (words, start/end times)
    - Manual metrics
-   - LLM feedback items
+   - LLM feedback flags (`feedback[slide_id].feedback`)
+   - LLM observations (`observations[slide_id].observations`) — propagated to `AggregatedSlide.observations`. Missing keys default to an empty list.
 
 2. Apply field transformations:
    - **Rename `text` → `transcript`**: The slide-indexed transcript `text` field becomes `transcript` in the final output
-   - **Promote `duration_seconds`**: Move `duration_seconds` from inside the metrics object to the slide top level (exclude it from `metrics`)
+   - **Promote `duration_seconds`**: Move `duration_seconds` from inside the metrics object to the slide top level (exclude it from `metrics` via `model_dump(exclude={"duration_seconds"})`)
 
 3. Set `total_duration_seconds` = Whisper `duration` (actual recording length)
 
@@ -242,9 +295,29 @@ Two independent analysis paths run **concurrently** on the slide-indexed transcr
    - `actual_duration_seconds`: same as `total_duration_seconds`
    - `duration_deviation_seconds`: `actual_duration_seconds - expected_duration_seconds`
 
-5. Construct final `PresentationResults` object
+5. Construct final `PresentationResults` object with `coaching_summary` initialized to `[]` (populated in substep 6b).
 
 **Output:** See DATA_SCHEMAS.md §7
+
+---
+
+## Step 6b: Coaching Summary Generation
+
+**Stage:** still `aggregating` (not a separate status stage)
+
+After `aggregate_results` returns, `_run_pipeline` makes one additional OpenAI Chat Completions call via `generate_coaching_summary(results)` to produce a prioritized, presentation-wide coaching debrief.
+
+**Input:** The freshly-built `PresentationResults` object (overall metrics, per-slide metrics, per-slide flags, and the full transcript are formatted into a single coaching context string).
+
+**Actions:**
+1. Build a coaching context string from `results` (overall metrics + per-slide breakdown + full transcript with slide markers).
+2. Call OpenAI Chat Completions with the coaching system prompt.
+3. Parse a JSON array of up to 3 `CoachingTip` objects (`title`, `explanation`, `slide_references`), humanizing any `slide_N` references into `Slide N+1` for display.
+4. Assign the parsed list to `results.coaching_summary`.
+
+**Failure mode (best-effort):** Any exception raised inside `generate_coaching_summary` (network, OpenAI SDK error, JSON parse failure, etc.) is caught in `_run_pipeline`, logged at WARNING, and the pipeline continues with `results.coaching_summary = []`. A failed coaching summary must never fail the pipeline run — completed status is still returned to the client.
+
+**Output:** `List[CoachingTip]` (length 0–3) attached to the `PresentationResults` before the run is marked `completed`.
 
 ---
 
@@ -263,11 +336,13 @@ Two independent analysis paths run **concurrently** on the slide-indexed transcr
 
 | Error | Stage | Behavior |
 |-------|-------|----------|
-| Whisper API failure | transcribing | Set status `failed`, include API error message |
-| Snowflake API failure | analyzing | Set status `failed`, include API error message |
+| Whisper API failure | transcribing | Set status `failed`, include SDK error message |
+| OpenAI Chat Completions failure (network, auth, rate limit, server error) | analyzing | Bubble out of `generate_llm_feedback`; outer `_run_pipeline` handler sets status `failed` with the SDK exception message |
 | Invalid audio format | transcribing | Set status `failed`, message: "Unsupported audio format" |
 | Empty transcript | indexing | Proceed with empty slides (valid edge case) |
-| LLM returns malformed JSON | analyzing | Retry once, then return empty feedback for that slide (graceful degradation) |
+| PDF parse failure | indexing (substep 4b) | Bubbles out and fails the run; the substep is optional, so omitting the PDF avoids this path entirely |
+| LLM returns malformed JSON (per slide) | analyzing | Retry that slide **once**. A second failure yields empty `flags` and `observations` for that slide (graceful degradation). This is the only retry in the pipeline |
+| Coaching summary failure | aggregating (substep 6b) | Swallowed: exception is logged at WARNING, `results.coaching_summary` is set to `[]`, and the run still completes successfully |
 
 ## Timing Expectations
 
@@ -275,7 +350,9 @@ Two independent analysis paths run **concurrently** on the slide-indexed transcr
 |------|------------------|
 | Whisper transcription | 5–30 seconds (depends on audio length) |
 | Slide indexing | < 100ms |
+| PDF text extraction (substep 4b, when PDF uploaded) | < 500ms typical; scales with page count |
 | Manual analytics | < 500ms |
-| LLM feedback (all slides) | 10–60 seconds (N API calls, depends on slide count) |
+| LLM feedback (all slides, sequential) | 10–60 seconds (N OpenAI calls, one per slide) |
 | Aggregation | < 100ms |
-| **Total pipeline** | **15–90 seconds typical** |
+| Coaching summary (substep 6b) | 2–8 seconds (one additional OpenAI call) |
+| **Total pipeline** | **20–100 seconds typical** |

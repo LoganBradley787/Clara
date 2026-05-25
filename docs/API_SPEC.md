@@ -34,6 +34,7 @@ All error responses follow this structure:
 | POST | `/api/presentations` | Submit a presentation for processing |
 | GET | `/api/presentations/{id}/status` | Poll processing status |
 | GET | `/api/presentations/{id}/results` | Retrieve final results |
+| GET | `/api/presentations/{id}/audio` | Download the original audio recording |
 | POST | `/api/presentations/{id}/chat` | Chat with AI coach about results |
 
 ---
@@ -50,7 +51,7 @@ Submit a recorded presentation for analysis.
 |-------|------|----------|-------------|
 | `audio` | File (binary) | Yes | Audio recording. Accepted formats: `audio/webm`, `audio/wav`, `audio/mp4` |
 | `metadata` | String (JSON) | Yes | JSON string containing slide timestamps and expectations |
-| `slides` | File (binary) | No | PDF file of the presentation slides. Used for SLIDE_READING detection. If omitted, SLIDE_READING flags are not generated. |
+| `slides` | File (binary) | No | PDF file of the presentation slides. Powers SLIDE_READING feedback (verbatim slide-text quoting) and CONTENT_COVERAGE observations (concepts covered vs. missed). If omitted, neither is generated. |
 
 **metadata JSON structure:**
 
@@ -223,6 +224,13 @@ Retrieve final processed results.
     "actual_duration_seconds": 585.3,
     "duration_deviation_seconds": -14.7
   },
+  "coaching_summary": [
+    {
+      "title": "Vary your pace for emphasis",
+      "explanation": "You held a steady 112 WPM throughout. Slow down for key claims and speed up on transitions to keep the audience tracking your structure.",
+      "slide_references": ["slide_0", "slide_2"]
+    }
+  ],
   "slides": {
     "slide_0": {
       "slide_index": 0,
@@ -266,7 +274,6 @@ Retrieve final processed results.
         {
           "type": "CONTENT_COVERAGE",
           "detail": "Speaker covered climate change effects but skipped mitigation strategies from the slide",
-          "text": null,
           "evidence": {
             "concepts_covered": ["climate change", "coastal communities"],
             "concepts_missed": ["mitigation strategies", "policy proposals"]
@@ -292,6 +299,19 @@ Retrieve final processed results.
 | `presentation_id` | string (UUID) | The presentation identifier |
 | `total_slides` | integer | Number of slides |
 | `total_duration_seconds` | float | Actual recording duration in seconds (from Whisper `duration` field). This is the same value as `overall_metrics.actual_duration_seconds`. |
+| `overall_metrics` | object | Aggregate metrics across the entire presentation. See `docs/DATA_SCHEMAS.md`. |
+| `coaching_summary` | `CoachingTip[]` | Ordered list of high-level coaching tips synthesized from the full results. May be empty if the post-aggregation LLM call fails. See **Coaching Tip Format** below. |
+| `slides` | `Dict[str, AggregatedSlide]` | Per-slide results keyed by slide ID (`"slide_0"`, `"slide_1"`, ...). |
+
+### Coaching Tip Format
+
+Each item in `coaching_summary`:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | Yes | Short tip headline. Max 100 characters. |
+| `explanation` | string | Yes | Concrete, actionable guidance. Max 300 characters. |
+| `slide_references` | string[] | Yes | Slide IDs (e.g., `["slide_0", "slide_2"]`) the tip is grounded in. May be empty for whole-presentation tips. |
 
 ### Presentation ID System
 
@@ -305,11 +325,13 @@ Expectations are passed in the initial POST and influence both manual analysis (
 
 | Tone | Slow | Normal | Fast | Pause Tolerance |
 |------|------|--------|------|-----------------|
-| `professional` | < 130 | 130–160 (inclusive) | > 160 | Pauses > 2s flagged |
-| `conversational` | < 140 | 140–180 (inclusive) | > 180 | Pauses > 3s flagged |
-| `educational` | < 110 | 110–145 (inclusive) | > 145 | Pauses > 2.5s flagged |
-| `persuasive` | < 140 | 140–170 (inclusive) | > 170 | Pauses > 2s flagged |
-| `storytelling` | < 120 | 120–160 (inclusive) | > 160 | Pauses > 3.5s flagged |
+| `professional` | < 100 | 100–135 (inclusive) | > 135 | Pauses > 2s flagged |
+| `conversational` | < 100 | 100–140 (inclusive) | > 140 | Pauses > 3s flagged |
+| `educational` | < 95 | 95–130 (inclusive) | > 130 | Pauses > 2.5s flagged |
+| `persuasive` | < 110 | 110–150 (inclusive) | > 150 | Pauses > 2s flagged |
+| `storytelling` | < 95 | 95–135 (inclusive) | > 135 | Pauses > 3.5s flagged |
+
+Classification rule: a slide's `speaking_pace` is `"slow"` when `wpm` is strictly below the low bound, `"fast"` when strictly above the high bound, and `"normal"` otherwise (bounds inclusive on both ends).
 
 ### Feedback Item Format
 
@@ -365,6 +387,46 @@ Each observation item in the `observations` array:
 
 ---
 
+## GET /api/presentations/{id}/audio
+
+Download the original audio recording that was uploaded for this presentation. Used by the frontend to play back the recording alongside the results.
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `string (UUID)` | Presentation ID |
+
+### Response
+
+**Status:** `200 OK`
+
+- **Content-Type:** `audio/webm`
+- **Body:** Raw audio bytes — the exact file that was uploaded via `POST /api/presentations` (no transcoding).
+
+The server always serves audio as `audio/webm` regardless of the uploaded format. Clients should treat the body as opaque binary suitable for `<audio>` playback.
+
+### Error Responses
+
+**404 Not Found** — presentation does not exist, or audio bytes are unavailable:
+```json
+{
+  "error": "not_found",
+  "message": "Presentation not found"
+}
+```
+
+**409 Conflict** — presentation is still processing:
+```json
+{
+  "error": "not_ready",
+  "message": "Still processing",
+  "status": "processing"
+}
+```
+
+---
+
 ## POST /api/presentations/{id}/chat
 
 Send a message to the AI coach for follow-up questions about this presentation's results.
@@ -405,6 +467,15 @@ Send a message to the AI coach for follow-up questions about this presentation's
 
 ### Error Responses
 
+**400 Bad Request** — request body failed validation (e.g., `message` missing, empty, or > 1000 characters):
+```json
+{
+  "error": "validation_error",
+  "message": "1 validation error for ChatRequest\nmessage\n  String should have at least 1 character ...",
+  "field": "message"
+}
+```
+
 **404 Not Found:**
 ```json
 {
@@ -413,11 +484,19 @@ Send a message to the AI coach for follow-up questions about this presentation's
 }
 ```
 
-**409 Conflict** — results not ready yet:
+**409 Conflict** — results not ready yet (presentation status is not `completed`):
 ```json
 {
   "error": "not_ready",
   "message": "Results must be available before starting a chat.",
   "status": "processing"
+}
+```
+
+**500 Internal Server Error** — the LLM call failed while generating the chat response:
+```json
+{
+  "error": "processing_failed",
+  "message": "Failed to generate chat response"
 }
 ```

@@ -25,13 +25,13 @@ from app.models import (
 )
 
 # Tone-based WPM ranges: (low_inclusive, high_inclusive)
-# Calibrated for live presentations (typically 90–130 WPM), not reading aloud
+# Calibrated for live presentations — normal conversational pace is ~125 WPM.
 PACE_RANGES: Dict[str, tuple] = {
-    "professional": (90, 130),
+    "professional": (100, 135),
     "conversational": (100, 140),
-    "educational": (80, 110),
-    "persuasive": (100, 140),
-    "storytelling": (85, 120),
+    "educational": (95, 130),
+    "persuasive": (110, 150),
+    "storytelling": (95, 135),
 }
 
 # Tone-based pause thresholds in seconds
@@ -62,7 +62,7 @@ def _normalize(word: str) -> str:
 
 
 def _classify_pace(wpm: float, tone: str) -> SpeakingPace:
-    low, high = PACE_RANGES.get(tone, (130, 160))
+    low, high = PACE_RANGES.get(tone, (100, 140))
     if wpm < low:
         return SpeakingPace.slow
     if wpm > high:

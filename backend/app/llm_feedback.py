@@ -2,18 +2,12 @@ import asyncio
 import json
 import logging
 import re
-import snowflake.connector
 from collections import Counter, defaultdict
 from typing import Dict, List, Optional, Set, Tuple
 
-from app.config import (
-    SNOWFLAKE_ACCOUNT,
-    SNOWFLAKE_USER,
-    SNOWFLAKE_PASSWORD,
-    SNOWFLAKE_ROLE,
-    SNOWFLAKE_WAREHOUSE,
-    CORTEX_MODEL,
-)
+import openai
+
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import (
     CoachingTip,
     Expectations,
@@ -284,70 +278,48 @@ def _build_evidence_section(
 
 
 # ---------------------------------------------------------------------------
-# Snowflake connection
+# OpenAI client
 # ---------------------------------------------------------------------------
 
 
-def _get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
-    return snowflake.connector.connect(
-        account=SNOWFLAKE_ACCOUNT,
-        user=SNOWFLAKE_USER,
-        password=SNOWFLAKE_PASSWORD,
-        role=SNOWFLAKE_ROLE,
-        warehouse=SNOWFLAKE_WAREHOUSE,
-    )
+def _get_openai_client() -> openai.OpenAI:
+    return openai.OpenAI(api_key=OPENAI_API_KEY)
 
 
-# ---------------------------------------------------------------------------
-# Cortex SQL call
-# ---------------------------------------------------------------------------
-
-
-def _call_cortex(
-    conn: snowflake.connector.SnowflakeConnection,
+def _call_llm(
+    client: openai.OpenAI,
     system_prompt: str,
     user_prompt: str,
+    json_object: bool = False,
 ) -> str:
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    return _call_cortex_messages(conn, messages)
+    return _call_llm_messages(client, messages, json_object=json_object)
 
 
-def _call_cortex_messages(
-    conn: snowflake.connector.SnowflakeConnection,
+def _call_llm_messages(
+    client: openai.OpenAI,
     messages: List[Dict],
-    max_tokens: int = 1024,
+    max_completion_tokens: int = 1024,
     temperature: float = 0.1,
+    json_object: bool = False,
 ) -> str:
-    options = {"temperature": temperature, "max_tokens": max_tokens}
+    kwargs: Dict = {
+        "model": OPENAI_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_completion_tokens": max_completion_tokens,
+    }
+    if json_object:
+        kwargs["response_format"] = {"type": "json_object"}
 
-    query = "SELECT SNOWFLAKE.CORTEX.COMPLETE(%(model)s, PARSE_JSON(%(messages)s), PARSE_JSON(%(options)s))"
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            query,
-            {
-                "model": CORTEX_MODEL,
-                "messages": json.dumps(messages),
-                "options": json.dumps(options),
-            },
-        )
-        row = cursor.fetchone()
-    finally:
-        cursor.close()
-
-    if row is None:
-        raise RuntimeError("Cortex COMPLETE returned no result")
-
-    result = row[0]
-    if isinstance(result, str):
-        parsed = json.loads(result)
-    else:
-        parsed = result
-
-    return parsed["choices"][0]["messages"]
+    response = client.chat.completions.create(**kwargs)
+    content = response.choices[0].message.content
+    if content is None:
+        raise RuntimeError("OpenAI chat completion returned no content")
+    return content
 
 
 # ---------------------------------------------------------------------------
@@ -583,7 +555,7 @@ async def generate_llm_feedback(
     slide_texts: Dict[str, str],
 ) -> Tuple[Dict[str, SlideFeedback], Dict[str, SlideObservations]]:
     """
-    Generate per-slide LLM feedback and observations via Snowflake Cortex.
+    Generate per-slide LLM feedback and observations via OpenAI.
     Uses pre-computed evidence to ground LLM analysis and post-validates output.
     Returns (feedback_dict, observations_dict).
     """
@@ -602,66 +574,63 @@ async def generate_llm_feedback(
         pdf_text = slide_texts.get(slide_id, "").strip()
         similarities[slide_id] = _compute_text_similarity(slide.text, pdf_text)
 
-    conn = await asyncio.to_thread(_get_snowflake_connection)
+    client = _get_openai_client()
 
-    try:
-        total_slides = len(slide_transcript)
-        feedback_result: Dict[str, SlideFeedback] = {}
-        obs_result: Dict[str, SlideObservations] = {}
+    total_slides = len(slide_transcript)
+    feedback_result: Dict[str, SlideFeedback] = {}
+    obs_result: Dict[str, SlideObservations] = {}
 
-        for slide_id, slide in slide_transcript.items():
-            if not slide.words:
-                feedback_result[slide_id] = SlideFeedback(feedback=[])
-                obs_result[slide_id] = SlideObservations(observations=[])
-                continue
+    for slide_id, slide in slide_transcript.items():
+        if not slide.words:
+            feedback_result[slide_id] = SlideFeedback(feedback=[])
+            obs_result[slide_id] = SlideObservations(observations=[])
+            continue
 
-            pdf_text = slide_texts.get(slide_id, "").strip()
-            sim = similarities[slide_id]
+        pdf_text = slide_texts.get(slide_id, "").strip()
+        sim = similarities[slide_id]
 
-            evidence_section = _build_evidence_section(
-                slide, cross_slide_reps, pdf_text, sim,
+        evidence_section = _build_evidence_section(
+            slide, cross_slide_reps, pdf_text, sim,
+        )
+
+        user_prompt = USER_PROMPT_TEMPLATE.format(
+            tone=expectations.tone.value,
+            context=expectations.context,
+            annotated_transcript=annotated,
+            slide_number=slide.slide_index + 1,
+            total_slides=total_slides,
+            slide_transcript=slide.text,
+            evidence_section=evidence_section,
+        )
+
+        try:
+            raw = await asyncio.to_thread(
+                _call_llm, client, SYSTEM_PROMPT, user_prompt, True
             )
-
-            user_prompt = USER_PROMPT_TEMPLATE.format(
-                tone=expectations.tone.value,
-                context=expectations.context,
-                annotated_transcript=annotated,
-                slide_number=slide.slide_index + 1,
-                total_slides=total_slides,
-                slide_transcript=slide.text,
-                evidence_section=evidence_section,
+            feedback_items, obs_items = _parse_and_validate(
+                raw, slide, cross_slide_reps, pdf_text, sim
             )
-
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            logger.warning(
+                "LLM response parse failed for %s (attempt 1): %s", slide_id, exc
+            )
             try:
                 raw = await asyncio.to_thread(
-                    _call_cortex, conn, SYSTEM_PROMPT, user_prompt
+                    _call_llm, client, SYSTEM_PROMPT, user_prompt, True
                 )
                 feedback_items, obs_items = _parse_and_validate(
                     raw, slide, cross_slide_reps, pdf_text, sim
                 )
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            except Exception as retry_exc:
                 logger.warning(
-                    "LLM response parse failed for %s (attempt 1): %s", slide_id, exc
+                    "LLM response parse failed for %s (attempt 2): %s",
+                    slide_id, retry_exc,
                 )
-                try:
-                    raw = await asyncio.to_thread(
-                        _call_cortex, conn, SYSTEM_PROMPT, user_prompt
-                    )
-                    feedback_items, obs_items = _parse_and_validate(
-                        raw, slide, cross_slide_reps, pdf_text, sim
-                    )
-                except Exception as retry_exc:
-                    logger.warning(
-                        "LLM response parse failed for %s (attempt 2): %s",
-                        slide_id, retry_exc,
-                    )
-                    feedback_items = []
-                    obs_items = []
+                feedback_items = []
+                obs_items = []
 
-            feedback_result[slide_id] = SlideFeedback(feedback=feedback_items)
-            obs_result[slide_id] = SlideObservations(observations=obs_items)
-    finally:
-        conn.close()
+        feedback_result[slide_id] = SlideFeedback(feedback=feedback_items)
+        obs_result[slide_id] = SlideObservations(observations=obs_items)
 
     return feedback_result, obs_result
 
@@ -728,17 +697,15 @@ async def generate_coaching_summary(
 ) -> List[CoachingTip]:
     """Generate 3 prioritized coaching tips from the full presentation results."""
     context = _build_coaching_context(results)
-    conn = await asyncio.to_thread(_get_snowflake_connection)
+    client = _get_openai_client()
     try:
         raw = await asyncio.to_thread(
-            _call_cortex, conn, COACHING_SYSTEM_PROMPT, context
+            _call_llm, client, COACHING_SYSTEM_PROMPT, context
         )
         return _parse_coaching_tips(raw, results)
     except Exception as exc:
         logger.warning("Coaching summary generation failed: %s", exc)
         return []
-    finally:
-        conn.close()
 
 
 def _humanize_slide_refs(text: str) -> str:
@@ -823,14 +790,12 @@ async def generate_chat_response(
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": user_message})
 
-    conn = await asyncio.to_thread(_get_snowflake_connection)
+    client = _get_openai_client()
     try:
         raw = await asyncio.to_thread(
-            _call_cortex_messages, conn, messages, max_tokens=1024, temperature=0.3
+            _call_llm_messages, client, messages, 1024, 0.3
         )
         return raw.strip()
     except Exception as exc:
         logger.warning("Chat response generation failed: %s", exc)
         raise
-    finally:
-        conn.close()

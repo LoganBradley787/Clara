@@ -495,7 +495,7 @@ export default function ChatPanel({ presentationId }: ChatPanelProps) {
                   lineHeight: 1.4,
                 }}
               >
-                Responses are generated from your presentation data via Snowflake Cortex.
+                Responses are generated from your presentation data via OpenAI.
               </p>
             </div>
           </motion.div>

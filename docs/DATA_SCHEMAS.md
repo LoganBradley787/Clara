@@ -128,7 +128,7 @@ Sent by frontend, used by both Manual Analytics and LLM Module.
 | Field | Type | Allowed Values | Description |
 |-------|------|---------------|-------------|
 | `tone` | string | `"professional"`, `"conversational"`, `"educational"`, `"persuasive"`, `"storytelling"` | Affects WPM benchmarks and pause thresholds |
-| `expected_duration_minutes` | number | 1–120 | Target duration |
+| `expected_duration_minutes` | number | greater than 0, up to 120 | Target duration |
 | `context` | string | free text, max 500 chars | Audience and purpose context for LLM |
 
 ---
@@ -195,17 +195,17 @@ Output of the Manual Analytics module.
 
 | Tone | Slow | Normal (inclusive) | Fast |
 |------|------|--------|------|
-| professional | < 90 WPM | 90 ≤ WPM ≤ 130 | > 130 WPM |
+| professional | < 100 WPM | 100 ≤ WPM ≤ 135 | > 135 WPM |
 | conversational | < 100 WPM | 100 ≤ WPM ≤ 140 | > 140 WPM |
-| educational | < 80 WPM | 80 ≤ WPM ≤ 110 | > 110 WPM |
-| persuasive | < 100 WPM | 100 ≤ WPM ≤ 140 | > 140 WPM |
-| storytelling | < 85 WPM | 85 ≤ WPM ≤ 120 | > 120 WPM |
+| educational | < 95 WPM | 95 ≤ WPM ≤ 130 | > 130 WPM |
+| persuasive | < 110 WPM | 110 ≤ WPM ≤ 150 | > 150 WPM |
+| storytelling | < 95 WPM | 95 ≤ WPM ≤ 135 | > 135 WPM |
 
 ---
 
 ## 6. LLM Feedback Output (Per Slide)
 
-Output of the Snowflake Cortex LLM module. The LLM catches language-level patterns that regex/counting cannot detect. It does not duplicate deterministic metrics.
+Output of the OpenAI LLM module. The LLM catches language-level patterns that regex/counting cannot detect. It does not duplicate deterministic metrics.
 
 ```json
 {
@@ -346,7 +346,6 @@ The complete results object returned by `GET /api/presentations/{id}/results`.
         {
           "type": "CONTENT_COVERAGE",
           "detail": "Speaker covered climate change effects but skipped mitigation strategies and policy proposals from the slide",
-          "text": null,
           "evidence": {
             "concepts_covered": ["climate change", "coastal communities", "rising sea levels"],
             "concepts_missed": ["mitigation strategies", "policy proposals"]

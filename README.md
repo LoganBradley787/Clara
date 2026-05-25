@@ -21,7 +21,7 @@ Slide Indexer (maps words → slides via timestamps)
         │
         ├──────────────────────────┐
         ▼                          ▼
-Manual Analytics             Snowflake Cortex
+Manual Analytics             OpenAI Chat Completions
  WPM, fillers, pauses,       REPETITION, HEDGE_STACK,
  repetition phrases,          FALSE_START, SLIDE_READING
  pace classification          (post-validated)
@@ -41,7 +41,7 @@ Manual metrics and LLM feedback run in parallel via `asyncio.gather`. The LLM fl
 
 ## What makes Clara different
 
-**Evidence-grounded LLM feedback.** Before Snowflake Cortex sees a slide, Clara pre-computes cross-slide n-gram repetitions and spoken-vs-slide text similarity. These get injected into the prompt as evidence. After the LLM responds, every claim is post-validated: hallucinated quotes, ungrounded repetition flags, and low-similarity slide reading claims get dropped.
+**Evidence-grounded LLM feedback.** Before the LLM sees a slide, Clara pre-computes cross-slide n-gram repetitions and spoken-vs-slide text similarity. These get injected into the prompt as evidence. After the LLM responds, every claim is post-validated: hallucinated quotes, ungrounded repetition flags, and low-similarity slide reading claims get dropped.
 
 **Telemetry, not judgment.** Every output traces back to something observable in the recording. No confidence scores, no subjective ratings, no "try to be more engaging." Clara tells you that you said "kind of" 14 times and hedged 3 words into one sentence on slide 4. What you do with that is up to you.
 
@@ -54,7 +54,7 @@ Manual metrics and LLM feedback run in parallel via `asyncio.gather`. The LLM fl
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, Motion |
 | Backend | Python, FastAPI, Pydantic v2 |
 | Transcription | OpenAI Whisper API (word-level timestamps) |
-| LLM Feedback | Snowflake Cortex (SQL-based inference) |
+| LLM Feedback | OpenAI Chat Completions (default model `gpt-5.4-mini`) |
 | PDF Extraction | PyMuPDF (slide text for reading detection) |
 
 ## Features
@@ -95,13 +95,8 @@ Frontend runs on `http://localhost:5173`, backend on `http://localhost:8000`.
 
 | Variable | Purpose |
 |----------|---------|
-| `OPENAI_API_KEY` | Whisper transcription |
-| `SNOWFLAKE_ACCOUNT` | Snowflake account identifier |
-| `SNOWFLAKE_USER` | Snowflake username |
-| `SNOWFLAKE_PASSWORD` | Snowflake password |
-| `SNOWFLAKE_ROLE` | Snowflake role |
-| `SNOWFLAKE_WAREHOUSE` | Snowflake warehouse |
-| `CORTEX_MODEL` | Cortex model name (default: `mistral-large2`) |
+| `OPENAI_API_KEY` | OpenAI API key — used for Whisper transcription and Chat Completions |
+| `OPENAI_MODEL` | Chat completion model (default: `gpt-5.4-mini`) |
 
 ## Project structure
 
@@ -113,7 +108,7 @@ backend/
 │   ├── transcriber.py       # OpenAI Whisper client
 │   ├── indexer.py           # Word-to-slide timestamp mapping
 │   ├── manual_analytics.py  # Algorithmic metrics (no LLM)
-│   ├── llm_feedback.py      # Snowflake Cortex + evidence grounding
+│   ├── llm_feedback.py      # OpenAI Chat Completions + evidence grounding
 │   ├── aggregator.py        # Merges metrics + feedback
 │   ├── models.py            # Pydantic schemas
 │   └── config.py            # Environment loading

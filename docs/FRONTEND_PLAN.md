@@ -1,5 +1,9 @@
 # Clara — Frontend Implementation Plan
 
+> **Historical document.** This was the original build plan written before the frontend existed. The shipped frontend has evolved past it: features like ChatPanel, CoachingSummary, CoverageChecklist, PresentationTimeline, and the Comparison page are not described here, and the feedback taxonomy below (`category` / `severity` with `pacing` / `clarity` / `diction` / `structure` / `timing`) was replaced with `{type, text, detail}` and four flag types (`REPETITION`, `HEDGE_STACK`, `FALSE_START`, `SLIDE_READING`) plus a separate `observations[]` array.
+>
+> For current frontend behavior, see [`FRONTEND_SPEC.md`](FRONTEND_SPEC.md). Kept for reference — useful for design-system rationale and the original build sequencing.
+
 A complete build plan for the React + Vite + TypeScript frontend. Every section references the relevant spec document. Nothing is invented — every feature traces back to `FRONTEND_SPEC.md`, `API_SPEC.md`, or `DATA_SCHEMAS.md`.
 
 ---
